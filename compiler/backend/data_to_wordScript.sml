@@ -38,7 +38,9 @@ val adjust_var_def = Define `
 
 val adjust_set_def = Define `
   adjust_set (names:'a num_map) =
-    (LS (),fromAList (MAP (λ(n,k). (adjust_var n,())) (toAList names)))`
+    fromAList (MAP (λ(n,k). (adjust_var n,())) (toAList names))`
+
+Overload adjust_set[local] = “λnames. (LS (), adjust_set (names:'a num_map))”;
 
 val Unit_def = Define`Unit = Const 2w`;
 
@@ -280,7 +282,7 @@ val AllocVar_def = Define `
                 (Assign 1 (Const (-1w:'a word)));
               Assign 3 (Op Sub [Lookup TriggerGC; Lookup NextFree]);
               If Lower 3 (Reg 1)
-                (list_Seq [SilentFFI c 3 (LS (), insert 1 () (SND (adjust_set names)));
+                (list_Seq [SilentFFI c 3 (LS (), insert 1 () (adjust_set names));
                            Alloc 1 (adjust_set names);
                            SilentFFI c 3 (adjust_set names)]) Skip]`;
 
