@@ -667,6 +667,7 @@ val comp_quotation = `
               let (q2,m) = comp n m p2 in
                 (Call (SOME (q1,lr,l1,l2)) dest (SOME (q2,k1,k2)),m))
     | Alloc k => (Call (SOME (Skip,0,n,m)) (INL gc_stub_location) NONE,m+1)
+    | StoreConsts k1 k2 (SOME loc) => (Call (SOME (Skip,0,n,m)) (INL loc) NONE,m+1)
     | _ => (p,m) `
 in
 val comp_def = Define comp_quotation
@@ -681,6 +682,7 @@ Theorem comp_pmatch = Q.prove(
    >> rpt strip_tac
    >> rw[Once comp_def,pairTheory.ELIM_UNCURRY] >> every_case_tac >> fs[]);
 end
+
 val prog_comp_def = Define `
   prog_comp (n,p) = (n,FST (comp n (next_lab p 2) p))`
 

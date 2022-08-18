@@ -357,8 +357,73 @@ val const_fp_loop_def = Define `
   (const_fp_loop (FFI x0 x1 x2 x3 x4 names) cs = (FFI x0 x1 x2 x3 x4 names, inter cs (all_names names))) /\
   (const_fp_loop (LocValue v x3) cs = (LocValue v x3, delete v cs)) /\
   (const_fp_loop (Alloc n names) cs = (Alloc n names, filter_v is_gc_const (inter cs (all_names names)))) /\
+  (const_fp_loop (StoreConsts a b c d ws) cs = (StoreConsts a b c d ws, delete a (delete b (delete c (delete d cs))))) /\
   (const_fp_loop (Install r1 r2 r3 r4 names) cs = (Install r1 r2 r3 r4 names, delete r1 (filter_v is_gc_const (inter cs (all_names names))))) /\
   (const_fp_loop p cs = (p, cs))`;
+
+Theorem const_fp_loop_pmatch:
+  !p cs.
+  const_fp_loop p cs =
+  case p of
+  | (Move pri moves) => (Move pri moves, const_fp_move_cs moves cs cs)
+  | (Inst i) => (Inst i, const_fp_inst_cs i cs)
+  | (Assign v e) =>
+    (case const_fp_exp e cs of
+       | Const c => (Assign v (Const c), insert v c cs)
+       | const_fp_e => (Assign v const_fp_e, delete v cs))
+  | (Get v name) => (Get v name, delete v cs)
+  | (OpCurrHeap b v w) => (OpCurrHeap b v w, delete v cs)
+  | (MustTerminate p) =>
+    (let (p', cs') = const_fp_loop p cs in
+      (MustTerminate p', cs'))
+  | (Seq p1 p2) =>
+   (let (p1', cs') = const_fp_loop p1 cs in
+    let (p2', cs'') = const_fp_loop p2 cs' in
+      (Seq p1' p2', cs''))
+  | (wordLang$If cmp lhs rhs p1 p2) =>
+    (case (lookup lhs cs, get_var_imm_cs rhs cs) of
+      | (SOME clhs, SOME crhs) =>
+        if word_cmp cmp clhs crhs then const_fp_loop p1 cs else const_fp_loop p2 cs
+      | _ => (let (p1', p1cs) = const_fp_loop p1 cs in
+              let (p2', p2cs) = const_fp_loop p2 cs in
+              (wordLang$If cmp lhs rhs p1' p2', inter_eq p1cs p2cs)))
+  | (Call ret dest args handler) =>
+    (case ret of
+      | NONE => (Call ret dest args handler, filter_v is_gc_const cs)
+      | SOME (n, names, ret_handler, l1, l2) =>
+        (if handler = NONE then
+           (let cs' = delete n (filter_v is_gc_const (inter cs names)) in
+            let (ret_handler', cs'') = const_fp_loop ret_handler cs' in
+            (Call (SOME (n, names, ret_handler', l1, l2)) dest args handler, cs''))
+         else
+           (Call ret dest args handler, LN)))
+  | (FFI x0 x1 x2 x3 x4 names) => (FFI x0 x1 x2 x3 x4 names, inter cs names)
+  | (LocValue v x3) => (LocValue v x3, delete v cs)
+  | (Alloc n names) => (Alloc n names, filter_v is_gc_const (inter cs names))
+  | (StoreConsts a b c d ws) => (StoreConsts a b c d ws, delete a (delete b (delete c (delete d cs))))
+  | (Install r1 r2 r3 r4 names) => (Install r1 r2 r3 r4 names, delete r1 (filter_v is_gc_const (inter cs names)))
+  | p => (p, cs)
+Proof
+  rpt strip_tac
+  >> CONV_TAC(patternMatchesLib.PMATCH_LIFT_BOOL_CONV true)
+  >> rpt strip_tac
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- (CONV_TAC(patternMatchesLib.PMATCH_LIFT_BOOL_CONV true)
+     >> rpt strip_tac >> fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY] >> every_case_tac >> fs[])
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- (CONV_TAC(RAND_CONV(patternMatchesLib.PMATCH_ELIM_CONV))
+              >> every_case_tac >> fs[Once const_fp_loop_def])
+  >- (CONV_TAC(RAND_CONV(patternMatchesLib.PMATCH_ELIM_CONV))
+      >> every_case_tac >> fs[const_fp_loop_def])
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
+  >> Cases_on `p` >> fs[const_fp_loop_def] >> every_case_tac >> fs[pairTheory.ELIM_UNCURRY]
+QED
 
 val const_fp_loop_ind = fetch "-" "const_fp_loop_ind";
 

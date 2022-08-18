@@ -215,6 +215,9 @@ val set_var_def = Define `
   set_var v x ^s =
     (s with locals := (insert v x s.locals))`;
 
+val unset_var_def = Define `
+  unset_var v ^s = (s with locals := delete v s.locals)`;
+
 val set_vars_def = Define `
   set_vars vs xs ^s =
     (s with locals := (alist_insert vs xs s.locals))`;
@@ -688,11 +691,34 @@ val MustTerminate_limit_def = zDefine `
     dimword (:'a) ** dimword (:'a) +
     dimword (:'a) ** dimword (:'a) ** dimword (:'a)`;
 
+Definition const_addresses_def:
+  const_addresses a [] d = T ∧
+  const_addresses a (x::xs) d =
+    (a IN d ∧ const_addresses (a + bytes_in_word) xs d)
+End
+
+Definition const_writes_def:
+  const_writes a off [] m = m ∧
+  const_writes (a:'a word) off ((b,x:'a word)::xs) m =
+    const_writes (a + bytes_in_word) off xs
+      ((a =+ Word (if b then x + off else x)) m)
+End
+
 Definition evaluate_def:
   (evaluate (Skip:'a wordLang$prog,^s) = (NONE,s)) /\
   (evaluate (Alloc n names,s) =
      case get_var n s of
      | SOME (Word w) => alloc w names s
+     | _ => (SOME Error,s)) /\
+  (evaluate (StoreConsts t1 t2 addr offset words,s) =
+     case (get_var addr s, get_var offset s) of
+     | (SOME (Word a), SOME (Word off)) =>
+        (if ~ const_addresses a words s.mdomain then
+           (SOME Error,s)
+         else
+           let s = s with memory := const_writes a off words s.memory in
+           let s = set_var offset (Word off) (unset_var t1 (unset_var t2 s)) in
+             (NONE, set_var addr (Word (a + bytes_in_word * n2w (LENGTH words))) s))
      | _ => (SOME Error,s)) /\
   (evaluate (Move pri moves,s) =
      if ALL_DISTINCT (MAP FST moves) then

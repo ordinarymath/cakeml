@@ -347,6 +347,23 @@ Proof
   EVAL_TAC
 QED
 
+Theorem unset_var_const[simp]:
+   (unset_var x z).clock = z.clock ∧
+   (unset_var x z).be = z.be ∧
+   (unset_var x z).ffi = z.ffi ∧
+   (unset_var x z).compile = z.compile ∧
+   (unset_var x z).compile_oracle = z.compile_oracle ∧
+   (unset_var x z).code_buffer = z.code_buffer ∧
+   (unset_var x z).data_buffer = z.data_buffer ∧
+   (unset_var x z).stack = z.stack ∧
+   (unset_var x z).locals_size = z.locals_size ∧
+   (unset_var x z).stack_limit = z.stack_limit ∧
+   (unset_var x z).stack_max = z.stack_max ∧
+   (unset_var x z).stack_size = z.stack_size
+Proof
+  EVAL_TAC
+QED
+
 Theorem set_fp_var_const[simp]:
    (set_fp_var x y z).clock = z.clock ∧
    (set_fp_var x y z).ffi = z.ffi ∧
@@ -642,6 +659,9 @@ Proof
     fs[call_env_def,push_env_def,LET_THM,env_to_list_def
       ,set_store_def,state_component_equality,flush_state_def]>>
     imp_res_tac pop_env_code_gc_fun_clock>>fs[]) >>
+  TRY (
+    TOP_CASE_TAC>>fs[]>>rw[]>>fs[state_component_equality,unset_var_def,set_var_def]>>
+    NO_TAC)>>
   full_simp_tac(srw_ss())[LET_THM,dec_clock_def] >>
   TRY pairarg_tac >> full_simp_tac(srw_ss())[] >> rveq >> full_simp_tac(srw_ss())[] >>
   imp_res_tac alloc_const >> full_simp_tac(srw_ss())[] >>
@@ -679,6 +699,7 @@ Theorem evaluate_dec_clock:
 Proof
   recInduct evaluate_ind >>srw_tac[][evaluate_def]>>full_simp_tac(srw_ss())[call_env_def,dec_clock_def]
   >- (tac>>imp_res_tac alloc_const>>full_simp_tac(srw_ss())[])
+  >- (tac>>rw[]>>fs[state_component_equality,unset_var_def,set_var_def])
   >- tac
   >- (TOP_CASE_TAC>>full_simp_tac(srw_ss())[]>> assume_tac inst_const>>tac)
   >- tac
@@ -1453,6 +1474,10 @@ Proof
                               PULL_EXISTS,CaseEq"bool"]>>
     qexists_tac `x'' with stack := t'` >> simp[] >>
     metis_tac[s_val_eq_def,s_key_eq_sym])
+  >- ( (*StoreConsts*)
+    fs[evaluate_def]>>every_case_tac>>simp[set_var_def,unset_var_def]>>
+    rw[]>>fs[s_key_eq_refl]>>
+    HINT_EXISTS_TAC>>simp[s_key_eq_refl] )
   >-(*Move*)
     (full_simp_tac(srw_ss())[evaluate_def]>>every_case_tac>>
     full_simp_tac(srw_ss())[set_vars_def,s_key_eq_refl]>>
@@ -2563,6 +2588,12 @@ val locals_rel_set_var = Q.prove(`
   locals_rel temp (insert n v s) (insert n v t)`,
   srw_tac[][]>>full_simp_tac(srw_ss())[locals_rel_def,lookup_insert]);
 
+val locals_rel_delete = Q.prove(`
+  ∀n s t.
+  locals_rel temp s t ⇒
+  locals_rel temp (delete n s) (delete n t)`,
+  rw[locals_rel_def,lookup_delete]);
+
 val locals_rel_cut_envs = Q.prove(`
   locals_rel temp loc loc' ∧
   every_name (λx. x < temp) names ∧
@@ -2772,6 +2803,11 @@ Proof
     CASE_TAC>>full_simp_tac(srw_ss())[call_env_def,flush_state_def]>>
     CASE_TAC>>full_simp_tac(srw_ss())[call_env_def,flush_state_def]>>
     qpat_x_assum`A=x''` sym_sub_tac>>full_simp_tac(srw_ss())[])
+  >- (*storeconst *)
+    (every_case_tac>>imp_res_tac locals_rel_word_exp>>full_simp_tac(srw_ss())[every_var_def]>>
+    imp_res_tac locals_rel_get_var>>full_simp_tac(srw_ss())[]>>
+    rfs[state_component_equality,set_var_def,unset_var_def]>>
+    metis_tac[locals_rel_set_var,locals_rel_delete])
   >-
     (every_case_tac>>imp_res_tac locals_rel_get_var>>rev_full_simp_tac(srw_ss())[every_var_def]>>
     full_simp_tac(srw_ss())[jump_exc_def,state_component_equality,locals_rel_def]>>
@@ -3019,6 +3055,8 @@ val call_arg_convention_def = Define`
   (call_arg_convention (FFI x ptr len ptr2 len2 args) = (ptr = 2 ∧ len = 4 ∧
                                                          ptr2 = 6 ∧ len2 = 8)) ∧
   (call_arg_convention (Alloc n s) = (n=2)) ∧
+  (call_arg_convention (StoreConsts a b c d ws) =
+    ((a=0) ∧ (b=2) ∧ (c=4) ∧ (d=6))) ∧
   (call_arg_convention (Call ret dest args h) =
     (case ret of
       NONE => args = GENLIST (\x.2*x) (LENGTH args)
@@ -3390,6 +3428,8 @@ Proof
      fs [OPTION_MAP2_DEF] >>
      drule stack_size_some_at_least_one >> DECIDE_TAC)
   >- (
+    every_case_tac>>fs[set_var_def,unset_var_def] >> rveq>> fs[state_fn_updates])
+  >- (
     every_case_tac >> fs [set_vars_def] >> rveq >> fs [state_fn_updates])
   >- (
     every_case_tac >> fs [] >> rveq >> drule inst_const_full >>
@@ -3554,6 +3594,31 @@ Proof
        disch_then drule >>
        metis_tac[])>>
      strip_tac >> rveq >>
+     PRED_ASSUM is_forall kall_tac >>
+     first_x_assum (qspecl_then [`vargs`, `clargs`, `exp`, `lsz`, `n`, `names`,
+          `ret_handler`, `l1`, `l2`, `env`] mp_tac) >> PURE_ASM_REWRITE_TAC [] >>
+     simp_tac bool_ss [] >>
+     disch_then (qspecl_then [`SOME (Result w w0)`,`stnew`] mp_tac) >> simp_tac bool_ss [] >>
+     rpt (pop_assum kall_tac) >>
+     strip_tac >>
+     assume_tac push_call_option_le_stack_max_preserved >>
+     res_tac >> rfs []) >>
+   TOP_CASE_TAC
+   >- (
+     strip_tac >> rveq >>
+     PRED_ASSUM is_forall kall_tac >>
+     first_x_assum (qspecl_then [`vargs`, `clargs`, `exp`, `lsz`, `n`, `names`,
+          `ret_handler`, `l1`, `l2`, `env`] mp_tac) >> PURE_ASM_REWRITE_TAC [] >>
+     simp_tac bool_ss [] >>
+     disch_then (qspecl_then [`SOME (Result (Loc l1 l2) w0)`,`stnew`] mp_tac) >> simp_tac bool_ss [] >>
+     rpt (pop_assum kall_tac) >>
+     strip_tac >>
+     assume_tac push_call_option_le_stack_max_preserved >>
+     res_tac >> rfs [])>>
+   IF_CASES_TAC
+   >- (
+     rveq >> strip_tac >>
+     last_x_assum (qspec_then `vargs` kall_tac) >>
      last_x_assum (qspecl_then [`vargs`, `clargs`, `exp`, `lsz`, `n`, `names`,
             `ret_handler`, `l1`, `l2`, `env`] mp_tac) >> simp_tac bool_ss [] >>
      PURE_ONCE_ASM_REWRITE_TAC [] >> simp_tac bool_ss [] >>
@@ -3941,6 +4006,9 @@ Proof
    (fs [wordSemTheory.evaluate_def] \\ rveq
     \\ fs [CaseEq"option",CaseEq"word_loc",bool_case_eq] \\ rveq \\ fs []
     \\ imp_res_tac alloc_const \\ fs [])
+  THEN1 (* StoreConsts *)
+    (fs[evaluate_def] \\ every_case_tac \\ fs[] \\ rveq
+    \\ simp[set_var_def,unset_var_def])
   THEN1 (* Move *)
    (fs [wordSemTheory.evaluate_def] \\ rveq
     \\ fs [CaseEq"option",CaseEq"word_loc",bool_case_eq] \\ rveq \\ fs [])

@@ -891,6 +891,9 @@ Proof
   >~ [‘MustTerminate’] >-
    (rw [evaluate_def] \\ pairarg_tac \\ fs []
     \\ every_case_tac \\ rw [] \\ rw [get_above_handler_def])
+  >~ [‘StoreConsts’] >-
+   (rw[evaluate_def] \\ every_case_tac \\ fs[set_var_def,unset_var_def,state_component_equality]
+    \\ irule EVERY2_refl \\ rw [sf_gc_consts_refl])
   >~ [‘Alloc’] >-
    (rw [evaluate_def, alloc_def] \\ every_case_tac \\ fs [] \\
     imp_res_tac gc_sf_gc_consts \\ fs [push_env_def, set_store_def, pop_env_def] \\
@@ -1092,6 +1095,7 @@ Proof
     >- (imp_res_tac evaluate_consts \\ imp_res_tac pop_env_gc_fun \\
         fs [set_var_def, set_vars_def, push_env_gc_fun])
     >- rw[])
+  (* TODO STORE CONSTS*)
   \\ (** Remaining: Raise, Return and Tick, buffer writes **)
     rw[const_fp_loop_def,evaluate_def] \\ fs[case_eq_thms,evaluate_def] \\
     rw[dec_clock_def]
