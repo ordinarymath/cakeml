@@ -904,8 +904,6 @@ val reg_bound_def = Define `
      v1 < k) /\
   (reg_bound (StoreConsts t1 t2 _) k <=>
      3 < k ∧ t1 < k ∧ t2 < k) /\
-  (reg_bound (Return v1 v2) k <=>
-     v1 < k /\ v2 < k) /\
   (reg_bound (Return v1) k <=>
      v1 < k) /\
   (reg_bound (JumpLower v1 v2 dest) k <=>

@@ -959,8 +959,8 @@ val inst_clock = Q.prove(
   \\ EVAL_TAC \\ fs[]);
 
 Theorem evaluate_clock:
-   !xs s1 vs s2. (evaluate (xs,s1) = (vs,s2)) ==>
-                 s2.clock <= s1.clock /\ s2.termdep = s1.termdep
+  !xs s1 vs s2. (evaluate (xs,s1) = (vs,s2)) ==>
+  s2.clock <= s1.clock /\ s2.termdep = s1.termdep
 Proof
   recInduct evaluate_ind \\ REPEAT STRIP_TAC
   \\ POP_ASSUM MP_TAC \\ ONCE_REWRITE_TAC [evaluate_def]
@@ -971,7 +971,7 @@ Proof
   \\ rpt (disch_then strip_assume_tac)
   \\ imp_res_tac alloc_clock \\ full_simp_tac(srw_ss())[]
   \\ rpt var_eq_tac \\ full_simp_tac(srw_ss())[]
-  \\ full_simp_tac(srw_ss())[set_vars_def,set_var_def,set_store_def]
+  \\ full_simp_tac(srw_ss())[set_vars_def,set_var_def,set_store_def,unset_var_def]
   \\ imp_res_tac inst_clock \\ full_simp_tac(srw_ss())[]
   \\ full_simp_tac(srw_ss())[mem_store_def,call_env_def,dec_clock_def,flush_state_def]
   \\ rpt var_eq_tac \\ full_simp_tac(srw_ss())[]

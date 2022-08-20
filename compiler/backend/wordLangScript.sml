@@ -45,6 +45,7 @@ val _ = Datatype `
        | Seq wordLang$prog wordLang$prog
        | If cmp num ('a reg_imm) wordLang$prog wordLang$prog
        | Alloc num cutsets
+       | StoreConsts num num num num ((bool # 'a word) list)
        | Raise num
        | Return num (num list) (* return lab, return values *)
        | Tick

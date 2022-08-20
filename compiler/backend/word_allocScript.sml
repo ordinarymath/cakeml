@@ -793,7 +793,7 @@ Proof
 QED
 
 (* Old representation *)
-val get_clash_sets_def = Define`
+(* val get_clash_sets_def = Define`
   (get_clash_sets (Seq s1 s2) live =
     let (hd,ls) = get_clash_sets s2 live in
     let (hd',ls') = get_clash_sets s1 hd in

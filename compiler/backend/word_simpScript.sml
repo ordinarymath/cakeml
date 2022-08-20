@@ -361,6 +361,7 @@ val const_fp_loop_def = Define `
   (const_fp_loop (Install r1 r2 r3 r4 names) cs = (Install r1 r2 r3 r4 names, delete r1 (filter_v is_gc_const (inter cs (all_names names))))) /\
   (const_fp_loop p cs = (p, cs))`;
 
+(*
 Theorem const_fp_loop_pmatch:
   !p cs.
   const_fp_loop p cs =
@@ -424,6 +425,7 @@ Proof
   >- fs[const_fp_loop_def,pairTheory.ELIM_UNCURRY]
   >> Cases_on `p` >> fs[const_fp_loop_def] >> every_case_tac >> fs[pairTheory.ELIM_UNCURRY]
 QED
+*)
 
 val const_fp_loop_ind = fetch "-" "const_fp_loop_ind";
 

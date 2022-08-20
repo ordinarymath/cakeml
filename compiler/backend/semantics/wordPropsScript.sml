@@ -935,7 +935,8 @@ Proof
   \\ EVERY_CASE_TAC
   \\ fs[set_vars_def,state_component_equality
        ,set_var_def,set_store_def,mem_store_def
-       ,call_env_def,flush_state_def,dec_clock_def,flush_state_def]
+       ,call_env_def,flush_state_def,dec_clock_def,flush_state_def
+       ,unset_var_def]
   \\ metis_tac[alloc_code_gc_fun_const,inst_code_gc_fun_const
               ,state_component_equality]
 QED
@@ -2210,6 +2211,10 @@ Proof
     IF_CASES_TAC>>
     full_simp_tac(srw_ss())[state_component_equality,FUN_EQ_THM,call_env_def,flush_state_def] >>
     metis_tac [])
+  >- (
+    qexists_tac`perm`>>fs[]>>
+    ntac 5 (full_case_tac>>full_simp_tac(srw_ss())[])>>
+    fs[set_var_def,unset_var_def,state_component_equality])
   >-
     (qexists_tac`perm`>>fs[]>>
     ntac 2 (full_case_tac>>full_simp_tac(srw_ss())[])>>
@@ -3477,7 +3482,7 @@ Proof
     Cases_on `s.locals_size` >> Cases_on `stack_size s.stack` >> Cases_on `s.stack_max` >>
     fs [OPTION_MAP_DEF] >> drule stack_size_some_at_least_one >> DECIDE_TAC) >>
   (* Call *)
-  qpat_x_assum `_ = (_,_)` mp_tac >>
+    qpat_x_assum `_ = (_,_)` mp_tac >>
   TOP_CASE_TAC >- (strip_tac >>rveq >> fs []) >>
   TOP_CASE_TAC >- (strip_tac >>rveq >> fs []) >>
   TOP_CASE_TAC >- (strip_tac >>rveq >> fs []) >>
@@ -3594,31 +3599,6 @@ Proof
        disch_then drule >>
        metis_tac[])>>
      strip_tac >> rveq >>
-     PRED_ASSUM is_forall kall_tac >>
-     first_x_assum (qspecl_then [`vargs`, `clargs`, `exp`, `lsz`, `n`, `names`,
-          `ret_handler`, `l1`, `l2`, `env`] mp_tac) >> PURE_ASM_REWRITE_TAC [] >>
-     simp_tac bool_ss [] >>
-     disch_then (qspecl_then [`SOME (Result w w0)`,`stnew`] mp_tac) >> simp_tac bool_ss [] >>
-     rpt (pop_assum kall_tac) >>
-     strip_tac >>
-     assume_tac push_call_option_le_stack_max_preserved >>
-     res_tac >> rfs []) >>
-   TOP_CASE_TAC
-   >- (
-     strip_tac >> rveq >>
-     PRED_ASSUM is_forall kall_tac >>
-     first_x_assum (qspecl_then [`vargs`, `clargs`, `exp`, `lsz`, `n`, `names`,
-          `ret_handler`, `l1`, `l2`, `env`] mp_tac) >> PURE_ASM_REWRITE_TAC [] >>
-     simp_tac bool_ss [] >>
-     disch_then (qspecl_then [`SOME (Result (Loc l1 l2) w0)`,`stnew`] mp_tac) >> simp_tac bool_ss [] >>
-     rpt (pop_assum kall_tac) >>
-     strip_tac >>
-     assume_tac push_call_option_le_stack_max_preserved >>
-     res_tac >> rfs [])>>
-   IF_CASES_TAC
-   >- (
-     rveq >> strip_tac >>
-     last_x_assum (qspec_then `vargs` kall_tac) >>
      last_x_assum (qspecl_then [`vargs`, `clargs`, `exp`, `lsz`, `n`, `names`,
             `ret_handler`, `l1`, `l2`, `env`] mp_tac) >> simp_tac bool_ss [] >>
      PURE_ONCE_ASM_REWRITE_TAC [] >> simp_tac bool_ss [] >>

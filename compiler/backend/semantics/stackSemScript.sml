@@ -573,7 +573,7 @@ End
 Definition check_store_consts_opt_def:
   check_store_consts_opt t1 t2 NONE _ = T ∧
   check_store_consts_opt t1 t2 (SOME n) c =
-    (lookup n c = SOME (Seq (StoreConsts t1 t2 NONE) (Return 0 0)))
+    (lookup n c = SOME (Seq (StoreConsts t1 t2 NONE) (Return 0)))
 End
 
 Definition dest_Seq_def:
