@@ -1468,6 +1468,7 @@ Proof
       Cases_on`call_FFI st.ffi s x'' x'`>>full_simp_tac(srw_ss())[strong_locals_rel_def]>>
       srw_tac[][]>>simp[call_env_def,flush_state_def]>>
       metis_tac[domain_lookup])
+     *)
 QED
 
 (* TODO: get_clash_sets, made redundant by clash tree *)
@@ -1589,7 +1590,6 @@ val every_var_exp_get_live_exp = Q.prove(
   HINT_EXISTS_TAC>>full_simp_tac(srw_ss())[]>>
   metis_tac[SUBSET_DEF,domain_big_union_subset]);
 
-(*
 (*Every variable is in some clash set*)
 Theorem every_var_in_get_clash_set:
   ∀prog live.
@@ -1759,28 +1759,6 @@ Proof
     TRY(qexists_tac`insert n () (union q' q)`>>
         full_simp_tac(srw_ss())[domain_union]>>metis_tac[domain_union]))
 QED
-
-        full_simp_tac(srw_ss())[domain_union]>>metis_tac[domain_union]))
-  >-
-    (srw_tac[][]
-    >-
-      (HINT_EXISTS_TAC>>full_simp_tac(srw_ss())[])
-    >>
-      qexists_tac`insert n () s`>>full_simp_tac(srw_ss())[])
-  >-
-    (srw_tac[][]>-(HINT_EXISTS_TAC>>full_simp_tac(srw_ss())[])>>
-    qexists_tac`insert n () live`>>full_simp_tac(srw_ss())[])
-  >-
-    (srw_tac[][]>-(HINT_EXISTS_TAC>>full_simp_tac(srw_ss())[])>>
-    qexists_tac`insert n () (insert n0 () live)`>>full_simp_tac(srw_ss())[])
-  >-
-    (rw[]>>
-    (qexists_tac`union (insert n () LN) live`>>fs[domain_union]))
-  >-
-    (srw_tac[][]>-(HINT_EXISTS_TAC>>full_simp_tac(srw_ss())[])>>
-     qexists_tac `insert n () (insert n0 () (insert n1 () (insert n2 () s0)))` >> fs[])
-    );
-*)
 
 (* Proofs for check_clash_tree *)
 Theorem check_col_INJ:
@@ -7149,7 +7127,7 @@ Proof
   impl_tac>-
     (rev_full_simp_tac(srw_ss())[]>>match_mp_tac every_var_mono>>HINT_EXISTS_TAC>>full_simp_tac(srw_ss())[]>>
     DECIDE_TAC)>>
-  full_simp_tac(srw_ss())[]
+  full_simp_tac(srw_ss())[] *)
 QED
 
 Theorem fake_moves_conventions2[local]:
