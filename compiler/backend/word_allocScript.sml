@@ -647,7 +647,7 @@ val get_live_def = Define`
    insert ptr1 () (insert len1 ()
      (insert ptr2 () (insert len2 () (union (SND numset) (FST numset)))))) ∧
   (get_live (StoreConsts a b c d ws) live =
-     (insert c () (insert d () live))) ∧
+    insert c () (insert d () (delete a (delete b live)))) ∧
   (get_live (Raise num) live = insert num () live) ∧
   (get_live (Return num1 nums) live = insert num1 () (numset_list_insert nums live)) ∧
   (get_live Tick live = live) ∧
