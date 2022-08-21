@@ -131,11 +131,11 @@ Proof
   \\ rename [`option_le x1 x2`] \\ strip_tac
   \\ Cases_on `x2` THEN1 fs [OPTION_MAP2_DEF]
   \\ Cases_on `x1` THEN1 fs [OPTION_MAP2_DEF]
-  \\ Cases_on `max_depth ss (call_graph funs n ns2 total' r1)`
+  \\ Cases_on `max_depth ss (call_graph funs n ns2 total' r2)`
   THEN1 fs [OPTION_MAP2_DEF]
   \\ Cases_on `max_depth ss (call_graph (delete x funs) x [x] total' z1)`
   THEN1 fs [OPTION_MAP2_DEF]
-  \\ Cases_on `max_depth ss (call_graph funs n ns total' r1)`
+  \\ Cases_on `max_depth ss (call_graph funs n ns total' r2)`
   \\ fs [OPTION_MAP2_DEF]
 QED
 

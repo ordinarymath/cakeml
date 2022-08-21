@@ -1095,7 +1095,10 @@ Proof
     >- (imp_res_tac evaluate_consts \\ imp_res_tac pop_env_gc_fun \\
         fs [set_var_def, set_vars_def, push_env_gc_fun])
     >- rw[])
-  (* TODO STORE CONSTS*)
+  >~ [‘StoreConsts’ ] >- (
+    fs [const_fp_loop_def] \\ rw [evaluate_def] \\ every_case_tac \\ fs [] \\
+    fs [get_var_def,lookup_delete] \\ res_tac \\
+    gvs [set_var_def,lookup_insert,lookup_delete,unset_var_def])
   \\ (** Remaining: Raise, Return and Tick, buffer writes **)
     rw[const_fp_loop_def,evaluate_def] \\ fs[case_eq_thms,evaluate_def] \\
     rw[dec_clock_def]
