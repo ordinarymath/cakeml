@@ -784,13 +784,9 @@ Definition word_prog_to_display_def:
   (word_prog_to_display (If cmp n reg p1 p2) = Item NONE (strlit "If")
     [word_prog_to_display p1; word_prog_to_display p2]) /\
   (word_prog_to_display (Alloc n ns) = Item NONE (strlit "Alloc")
-<<<<<<< HEAD
     [num_to_display n; num_sets_to_display ns]) /\
-=======
-    [num_to_display n; num_set_to_display ns]) /\
   (word_prog_to_display (StoreConsts a b c d ws) = Item NONE (strlit "StoreConsts")
     [num_to_display a; num_to_display b; num_to_display c; num_to_display d] (* TODO: include ws *)) /\
->>>>>>> origin/master
   (word_prog_to_display (Raise n) = item_with_num (strlit "Raise") n) /\
   (word_prog_to_display (Return n1 ns) = item_with_nums (strlit "Return") (n1::ns)) /\
   (word_prog_to_display Tick = empty_item (strlit "Tick")) /\

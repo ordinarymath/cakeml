@@ -355,7 +355,7 @@ End
 
 Definition store_consts_stub_def:
   store_consts_stub k =
-    Seq (StoreConsts k (k+1) NONE) (Return 0 0)
+    Seq (StoreConsts k (k+1) NONE) (Return 0)
 End
 
 (*stack args are in wordLang vars 0,2,4,...,2*(k-1), 2*k , ...*)
