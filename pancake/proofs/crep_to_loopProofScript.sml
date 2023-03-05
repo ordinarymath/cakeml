@@ -16,6 +16,10 @@ val _ = set_grammar_ancestry
          "loopProps", "pan_commonProps",
          "loop_liveProof", "crep_to_loop"];
 
+val _ = temp_delsimps ["fromAList_def", "domain_union",
+                       "domain_inter", "domain_difference",
+                       "domain_map", "sptree.map_def", "sptree.lookup_rwts",
+                       "sptree.insert_notEmpty", "sptree.isEmpty_union"];
 
 Theorem evaluate_nested_seq_append_first =
 evaluate_nested_seq_cases |> CONJUNCT1
@@ -2778,7 +2782,7 @@ val tail_case_tac =
    ‘st.clock = 0’ by fs [state_rel_def] >>
    fs [] >> strip_tac >> rveq >> fs [] >>
    fs [crepSemTheory.empty_locals_def] >>
-   fs [state_rel_def]
+   fs [state_rel_def];
 
 val timed_out_before_call_tac =
    drule code_rel_intro >>
@@ -2861,7 +2865,7 @@ val timed_out_before_call_tac =
    ‘st.clock = 0’ by fs [state_rel_def] >>
    fs [] >> strip_tac >> rveq >> fs [] >>
    fs [crepSemTheory.empty_locals_def] >>
-   fs [state_rel_def]
+   fs [state_rel_def];
 
 
 val fcalled_timed_out_tac =
@@ -2970,7 +2974,7 @@ val fcalled_timed_out_tac =
     first_x_assum (qspec_then ‘ad’ assume_tac) >>
     TRY (cases_on ‘v’) >>
     rfs [wlab_wloc_def]) >>
-   fs [code_rel_def, ctxt_fc_def]
+   fs [code_rel_def, ctxt_fc_def];
 
 
 val fcalled_ffi_case_tac =
@@ -3074,7 +3078,7 @@ val fcalled_ffi_case_tac =
    first_x_assum (qspec_then ‘ad’ assume_tac) >>
    TRY (cases_on ‘v’) >>
    rfs [wlab_wloc_def]) >>
-  fs [code_rel_def, ctxt_fc_def]
+  fs [code_rel_def, ctxt_fc_def];
 
 
 Theorem compile_Call:
@@ -5440,5 +5444,16 @@ Proof
   gs [loop_liveTheory.mark_all_def]
 QED
 
+(* first_name offset *)
+
+Theorem crep_to_loop_compile_prog_lab_min:
+  crep_to_loop$compile_prog cprog = lprog ⇒
+  EVERY (λprog. 60 ≤ FST prog) lprog
+Proof
+  gs[crep_to_loopTheory.compile_prog_def]>>
+  gs[MAP2_MAP, EVERY_MEM]>>
+  rpt strip_tac>>gvs[MEM_MAP,MEM_ZIP]>>
+  pairarg_tac>>gs[crep_to_loopTheory.first_name_def]
+QED
 
 val _ = export_theory();

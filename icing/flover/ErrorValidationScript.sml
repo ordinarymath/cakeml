@@ -16,6 +16,11 @@ open preambleFloVer;
 
 val _ = new_theory "ErrorValidation";
 
+val _ = temp_delsimps ["fromAList_def", "domain_union",
+                       "domain_inter", "domain_difference",
+                       "domain_map", "sptree.map_def", "sptree.lookup_rwts",
+                       "sptree.insert_notEmpty", "sptree.isEmpty_union"]
+
 val _ = Parse.hide "delta"; (* so that it can be used as a variable *)
 
 Overload abs[local] = “realax$abs”
@@ -1019,7 +1024,7 @@ Proof
   \\ fs[contained_def, widenInterval_def]
 QED
 
-val _ = diminish_srw_ss ["RMULCANON_ss","RMULRELNORM_ss"]
+val _ = diminish_srw_ss ["RMULCANON","RMULRELNORM"]
 
 Theorem divisionErrorBounded:
   !(e1lo e1hi nR1 e2lo e2hi nR2 nF1 nF2 err1 err2:real).

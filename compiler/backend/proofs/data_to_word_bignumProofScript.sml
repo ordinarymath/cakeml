@@ -5,7 +5,7 @@ open preamble dataSemTheory dataPropsTheory
      copying_gcTheory int_bitwiseTheory finite_mapTheory
      data_to_word_memoryProofTheory data_to_word_gcProofTheory
      data_to_wordTheory wordPropsTheory labPropsTheory
-     set_sepTheory semanticsPropsTheory word_to_wordProofTheory
+     set_sepTheory semanticsPropsTheory
      helperLib alignmentTheory blastLib word_bignumTheory
      wordLangTheory word_bignumProofTheory gen_gc_partialTheory
      gc_sharedTheory word_gcFunctionsTheory word_depthProofTheory;
@@ -13,7 +13,10 @@ local open gen_gcTheory in end
 
 val _ = new_theory "data_to_word_bignumProof";
 
-val _ = temp_delsimps ["NORMEQ_CONV"]
+val _ = temp_delsimps ["NORMEQ_CONV", "fromAList_def", "domain_union",
+                       "domain_inter", "domain_difference",
+                       "domain_map", "sptree.map_def", "sptree.lookup_rwts",
+                       "sptree.insert_notEmpty", "sptree.isEmpty_union"]
 val _ = diminish_srw_ss ["ABBREV"]
 val _ = set_trace "BasicProvers.var_eq_old" 1
 

@@ -8,7 +8,7 @@ open preamble stack_allocTheory
 local open blastLib wordSemTheory in end
 
 val _ = temp_delsimps ["NORMEQ_CONV"]
-val _ = temp_delsimps ["lift_disj_eq", "lift_imp_disj"]
+val _ = temp_delsimps ["lift_disj_eq", "lift_imp_disj", "fromAList_def"]
 
 val _ = new_theory"stack_allocProof";
 val _ = (max_print_depth := 18);
@@ -5035,7 +5035,7 @@ val alloc_correct = Q.prove(
 
 val find_code_IMP_lookup = Q.prove(
   `find_code dest regs (s:'a num_map) = SOME x ==>
-    ?k. lookup k s = SOME x /\
+    ?k. sptree$lookup k s = SOME x /\
         (find_code dest regs = ((lookup k):'a num_map -> 'a option))`,
   Cases_on `dest` \\ full_simp_tac(srw_ss())[find_code_def,FUN_EQ_THM]
   \\ every_case_tac \\ full_simp_tac(srw_ss())[] \\ metis_tac []);
@@ -6207,7 +6207,8 @@ Proof
 QED
 
 Theorem compile_has_fp_ops[simp]:
-  compile (dconf with <| has_fp_ops := b1; has_fp_tern := b2 |>) code = compile dconf code
+  compile (dconf with <| has_fp_ops := b1; has_fp_tern := b2 |>) code =
+  compile dconf code
 Proof
   fs [compile_def,stubs_def,word_gc_code_def]
   \\ every_case_tac \\ fs []

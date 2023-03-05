@@ -4,7 +4,7 @@
 open preamble dataSemTheory dataPropsTheory copying_gcTheory
      int_bitwiseTheory data_to_word_memoryProofTheory finite_mapTheory
      data_to_wordTheory wordPropsTheory labPropsTheory whileTheory
-     set_sepTheory semanticsPropsTheory word_to_wordProofTheory
+     set_sepTheory semanticsPropsTheory
      helperLib alignmentTheory blastLib word_bignumTheory wordLangTheory
      word_bignumProofTheory gen_gc_partialTheory gc_sharedTheory
      word_gcFunctionsTheory backendPropsTheory
@@ -26,6 +26,8 @@ val shift_def = backend_commonTheory.word_shift_def
 val isWord_def = wordSemTheory.isWord_def
 val theWord_def = wordSemTheory.theWord_def
 val is_fwd_ptr_def = wordSemTheory.is_fwd_ptr_def
+
+Overload lookup[local] = “sptree$lookup”;
 
 val _ = hide "next";
 
@@ -394,9 +396,10 @@ QED
 Theorem lookup_adjust_var_adjust_set:
    lookup (adjust_var n) (adjust_set s) = lookup n s
 Proof
-  full_simp_tac(srw_ss())[lookup_def,adjust_set_def,lookup_fromAList,unit_opt_eq,adjust_var_NEQ_0]
-  \\ full_simp_tac(srw_ss())[IS_SOME_ALOOKUP_EQ,MEM_MAP,PULL_EXISTS,EXISTS_PROD,adjust_var_11]
-  \\ full_simp_tac(srw_ss())[MEM_toAList] \\ Cases_on `lookup n s` \\ full_simp_tac(srw_ss())[]
+  simp[lookup_def,adjust_set_def,lookup_fromAList,unit_opt_eq,adjust_var_NEQ_0,
+       Excl "fromAList_def"]
+  \\ simp[IS_SOME_ALOOKUP_EQ,MEM_MAP,PULL_EXISTS,EXISTS_PROD,adjust_var_11]
+  \\ simp[MEM_toAList] \\ Cases_on `lookup n s` \\ simp[]
 QED
 
 Theorem adjust_var_IN_adjust_set:
@@ -417,9 +420,10 @@ QED
 Theorem lookup_adjust_var_adjust_set_NONE:
    lookup (adjust_var n) (adjust_set s) = NONE <=> lookup n s = NONE
 Proof
-  full_simp_tac(srw_ss())[lookup_def,adjust_set_def,lookup_fromAList,adjust_var_NEQ_0,none_opt_eq]
-  \\ full_simp_tac(srw_ss())[IS_SOME_ALOOKUP_EQ,MEM_MAP,PULL_EXISTS,EXISTS_PROD,adjust_var_11]
-  \\ full_simp_tac(srw_ss())[MEM_toAList] \\ Cases_on `lookup n s` \\ full_simp_tac(srw_ss())[]
+  simp[lookup_def,adjust_set_def,lookup_fromAList,adjust_var_NEQ_0,none_opt_eq,
+       Excl "fromAList_def"]
+  \\ simp[IS_SOME_ALOOKUP_EQ,MEM_MAP,PULL_EXISTS,EXISTS_PROD,adjust_var_11]
+  \\ simp[MEM_toAList] \\ Cases_on `lookup n s` \\ simp[]
 QED
 
 Theorem lookup_adjust_var_adjust_set_SOME_UNIT:
@@ -533,6 +537,13 @@ Proof
   Cases \\ full_simp_tac(srw_ss())[]
 QED
 
+Theorem IS_SOME_lookup_domain:
+  IS_SOME (lookup k m) ⇔ k ∈ domain m
+Proof
+  simp[optionTheory.IS_SOME_EXISTS, domain_lookup]
+QED
+
+
 Theorem word_ml_inv_insert:
    word_ml_inv (heap,be,a,sp,sp1,gens) limit ts c refs
       ([(x,w)]++join_env d (toAList (inter l (adjust_set d)))++xs) ==>
@@ -541,19 +552,27 @@ Theorem word_ml_inv_insert:
         (toAList (inter (insert (adjust_var dest) w l)
                                 (adjust_set (insert dest x d))))++xs)
 Proof
-  match_mp_tac word_ml_inv_rearrange \\ full_simp_tac(srw_ss())[] \\ srw_tac[][] \\ full_simp_tac(srw_ss())[]
+  match_mp_tac word_ml_inv_rearrange \\ full_simp_tac(srw_ss())[]
+  \\ srw_tac[][] \\ full_simp_tac(srw_ss())[]
   \\ full_simp_tac(srw_ss())[join_env_def,MEM_MAP,MEM_FILTER,EXISTS_PROD]
-  \\ full_simp_tac(srw_ss())[] \\ srw_tac[][] \\ full_simp_tac(srw_ss())[MEM_toAList]
+  \\ full_simp_tac(srw_ss())[] \\ srw_tac[][]
+  \\ full_simp_tac(srw_ss())[MEM_toAList]
   \\ full_simp_tac(srw_ss())[lookup_insert,lookup_inter_alt]
   \\ Cases_on `dest = (p_1 - 2) DIV 2` \\ full_simp_tac(srw_ss())[]
   \\ full_simp_tac(srw_ss())[adjust_var_DIV_2]
   \\ imp_res_tac IMP_adjust_var \\ full_simp_tac(srw_ss())[]
-  \\ full_simp_tac(srw_ss())[domain_lookup] \\ every_case_tac \\ full_simp_tac(srw_ss())[]
-  \\ srw_tac[][] \\ full_simp_tac(srw_ss())[adjust_var_11] \\ full_simp_tac(srw_ss())[]
-  \\ disj1_tac \\ disj2_tac \\ qexists_tac `p_1` \\ full_simp_tac(srw_ss())[unit_some_eq_IS_SOME]
+  \\ full_simp_tac(srw_ss())[domain_lookup, AllCaseEqs()]
+  \\ srw_tac[][] \\ full_simp_tac(srw_ss())[adjust_var_11]
+  \\ full_simp_tac(srw_ss())[]
+  \\ disj1_tac \\ disj2_tac \\ qexists_tac `p_1`
+  \\ full_simp_tac(srw_ss())[unit_some_eq_IS_SOME]
   \\ full_simp_tac(srw_ss())[adjust_set_def,lookup_fromAList] \\ rev_full_simp_tac(srw_ss())[]
   \\ full_simp_tac(srw_ss())[IS_SOME_ALOOKUP_EQ,MEM_MAP,PULL_EXISTS,EXISTS_PROD,adjust_var_11]
-  \\ full_simp_tac(srw_ss())[MEM_toAList,lookup_insert] \\ every_case_tac \\ full_simp_tac(srw_ss())[]
+  \\ full_simp_tac(srw_ss())[MEM_toAList,lookup_insert]
+  \\ gs[IS_SOME_lookup_domain, domain_fromAList, MAP_MAP_o,
+        pairTheory.o_UNCURRY_R, combinTheory.o_ABS_R]
+  \\ gs[MEM_MAP, EXISTS_PROD, adjust_var_11]
+  \\ gs[MEM_toAList, adjust_var_11, lookup_insert]
 QED
 
 Theorem one_and_or_1:
@@ -4716,6 +4735,7 @@ Theorem cut_env_IMP_cut_env:
     dataSem$cut_env r s.locals = SOME x ==>
     ?y. wordSem$cut_env (LS (), adjust_set r) t.locals = SOME y
 Proof
+(*
   full_simp_tac(srw_ss())[dataSemTheory.cut_env_def,wordSemTheory.cut_env_def,
      wordSemTheory.cut_envs_def,wordSemTheory.cut_names_def,AllCaseEqs()]
   \\ full_simp_tac(srw_ss())[adjust_set_def,domain_fromAList,SUBSET_DEF,MEM_MAP,
@@ -4733,6 +4753,22 @@ Proof
   \\ sg `IS_SOME (lookup q s.locals)` \\ full_simp_tac(srw_ss())[] \\ res_tac
   \\ Cases_on `lookup (adjust_var q) t.locals` \\ full_simp_tac(srw_ss())[]
   \\ full_simp_tac(srw_ss())[MEM_toAList,unit_some_eq_IS_SOME] \\ res_tac \\ full_simp_tac(srw_ss())[]
+*)
+  fs[dataSemTheory.cut_env_def,wordSemTheory.cut_env_def]
+  \\ fs[adjust_set_def,domain_fromAList,SUBSET_DEF,MEM_MAP,
+        Excl "fromAList_def",
+        sptreeTheory.domain_lookup,lookup_fromAList]
+  \\ srw_tac[][]
+  \\ gs[AllCaseEqs()]
+  >- gs[state_rel_def]
+  \\ imp_res_tac alistTheory.ALOOKUP_MEM
+  \\ gvs[unit_some_eq_IS_SOME,IS_SOME_ALOOKUP_EQ,MEM_MAP]
+  \\ rename [‘0 ≠ FST (UNCURRY _ y1)’, ‘_ = UNCURRY _ y2’]
+  \\ Cases_on `y1` \\ Cases_on `y2`
+  \\ gvs[adjust_var_11]
+  \\ gvs[state_rel_def, optionTheory.IS_SOME_EXISTS, PULL_EXISTS]
+  \\ rpt (first_assum irule)
+  \\ gs[MEM_toAList]
 QED
 
 Theorem jump_exc_call_env:
@@ -5211,6 +5247,7 @@ Theorem adjust_var_cut_env_IMP_MEM:
     domain x SUBSET EVEN /\
     (IS_SOME (lookup (adjust_var n) x) <=> IS_SOME (lookup n s))
 Proof
+(*
   fs [wordSemTheory.cut_env_def,SUBSET_DEF,
       wordSemTheory.cut_envs_def,wordSemTheory.cut_names_def,
       domain_lookup,AllCaseEqs(),IS_SOME_EXISTS]
@@ -5227,7 +5264,20 @@ Proof
   \\ full_simp_tac(srw_ss())[lookup_def,adjust_set_def,lookup_fromAList,unit_opt_eq,adjust_var_NEQ_0]
   \\ full_simp_tac(srw_ss())[IS_SOME_ALOOKUP_EQ,MEM_MAP,PULL_EXISTS,EXISTS_PROD,adjust_var_11]
   \\ full_simp_tac(srw_ss())[MEM_toAList] \\ Cases_on `lookup n s` \\ full_simp_tac(srw_ss())[]
+*)
+  simp[wordSemTheory.cut_env_def,SUBSET_DEF,domain_lookup]
+  \\ srw_tac[][] \\ gs[lookup_inter_alt] THEN1
+   (full_simp_tac(srw_ss())[domain_lookup,unit_some_eq_IS_SOME,adjust_set_def,
+                            Excl "fromAList_def"]
+    \\ full_simp_tac(srw_ss())[IS_SOME_ALOOKUP_EQ,MEM_MAP,lookup_fromAList]
+    \\ every_case_tac \\ full_simp_tac(srw_ss())[] \\ srw_tac[][] \\ full_simp_tac(srw_ss())[IN_DEF]
+    \\ full_simp_tac(srw_ss())[IS_SOME_ALOOKUP_EQ,MEM_MAP,lookup_fromAList]
+    \\ pairarg_tac \\ srw_tac[][] \\ full_simp_tac(srw_ss())[EVEN_adjust_var])
+  \\ fs[domain_lookup,lookup_adjust_var_adjust_set_SOME_UNIT] \\ srw_tac[][]
+  \\ metis_tac [lookup_adjust_var_adjust_set_SOME_UNIT,IS_SOME_DEF]
 QED
+
+val _ = temp_delsimps ["fromAList_def"]
 
 Theorem state_rel_call_env_push_env:
    !opt:(num # 'a wordLang$prog # num # num) option.

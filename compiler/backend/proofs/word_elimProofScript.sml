@@ -8,6 +8,7 @@ open preamble wordLangTheory
 val _ = new_theory "word_elimProof";
 val _ = set_grammar_ancestry
   ["wordLang", "word_elim", "wordSem", "wordProps", "spt_closure"];
+val _ = temp_delsimps ["fromAList_def"]
 val _ = Parse.hide"mem";
 val _ = Parse.bring_to_front_overload"domain"{Thy="sptree",Name="domain"};
 
@@ -35,6 +36,8 @@ Proof
     >- (fs[MEM_MAP, MEM_FILTER] >> qexists_tac `y` >> rw[])
 QED
 
+
+(*
 
 (**************************** no_install *****************************)
 
@@ -114,7 +117,7 @@ Proof
         gs[]>>metis_tac[no_install_find_code])
 QED
 
-
+*)
 
 (**************************** DEFINITIONS *****************************)
 
@@ -147,11 +150,10 @@ val get_locals_def = Define ` (* locals : ('a word_loc) num_map *)
 `
 
 Theorem domain_get_locals_lookup:
-     ∀ n t . n ∈ domain (get_locals t) ⇔ ∃ k n1 . lookup k t = SOME (Loc n n1)
+  ∀ n t . n ∈ domain (get_locals t) ⇔ ∃ k n1 . lookup k t = SOME (Loc n n1)
 Proof
-    rw[] >> reverse (EQ_TAC) >> rw[]
-    >- (
-      pop_assum mp_tac >> map_every qid_spec_tac [`n`,`k`,`t`] >>
+  rw[] >> reverse (EQ_TAC) >> rw[]
+  >- (pop_assum mp_tac >> map_every qid_spec_tac [`n`,`k`,`t`] >>
       Induct >> rw[lookup_def, get_locals_def, dest_word_loc_def, domain_union]
       >- metis_tac[]
       >- metis_tac[] >>
@@ -160,30 +162,24 @@ Proof
       Cases_on `n = 0` >> fs[] >> rveq >> fs[dest_word_loc_def] >>
       Cases_on `a` >> fs[dest_word_loc_def] >> Cases_on `EVEN n` >> fs[] >>
       metis_tac[]
-      )
-    >> Induct_on `t`
-        >- rw[get_locals_def, domain_def]
-        >- (rw[get_locals_def, domain_def, lookup_def] >>
-            Cases_on `a` >> fs[dest_word_loc_def])
-        >- (rw[get_locals_def, domain_def, lookup_def] >>
-            fs[domain_union] >> res_tac
-            >- (qexists_tac `2 * k + 2` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
-                once_rewrite_tac[MULT_COMM] >> fs[DIV_MULT])
-            >- (qexists_tac `2 * k + 1` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
-                once_rewrite_tac[MULT_COMM] >> fs[MULT_DIV]))
-        >- (rw[get_locals_def, domain_def, lookup_def] >>
-            Cases_on `a` >> fs[dest_word_loc_def]
-            >- (fs[domain_union] >> res_tac
-                >- (qexists_tac `2 * k + 2` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
-                    once_rewrite_tac[MULT_COMM] >> fs[DIV_MULT])
-                >- (qexists_tac `2 * k + 1` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
-                    once_rewrite_tac[MULT_COMM] >> fs[MULT_DIV]))
-            >- (rveq >> qexists_tac `0n` >> fs[])
-            >- (fs[domain_union] >> res_tac
-                >- (qexists_tac `2 * k + 2` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
-                    once_rewrite_tac[MULT_COMM] >> fs[DIV_MULT])
-                >- (qexists_tac `2 * k + 1` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
-                    once_rewrite_tac[MULT_COMM] >> fs[MULT_DIV])))
+     ) >>
+  Induct_on `t`
+  >- rw[get_locals_def, domain_def]
+  >- (rw[get_locals_def, domain_def, lookup_def] >>
+      Cases_on `a` >> fs[dest_word_loc_def])
+  >- (rw[get_locals_def, domain_def, lookup_def] >>
+      fs[domain_union] >> res_tac
+      >- (qexists_tac `2 * k + 2` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
+          once_rewrite_tac[MULT_COMM] >> fs[DIV_MULT])
+      >- (qexists_tac `2 * k + 1` >> fs[EVEN_DOUBLE, EVEN_ADD] >>
+          once_rewrite_tac[MULT_COMM] >> fs[MULT_DIV]))
+  >- (rw[get_locals_def, domain_def, lookup_def] >>
+      Cases_on `a` >> fs[dest_word_loc_def] >>
+      simp[AllCaseEqs()] >> gvs[EXISTS_OR_THM]
+      >- (qexists ‘2 * k + 2’ >> simp[EVEN_ADD, EVEN_MULT])
+      >- (qexists ‘2 * k + 1’ >> simp[EVEN_ADD, EVEN_MULT])
+      >- (disj2_tac >> qexists ‘2 * k + 2’ >> simp[EVEN_ADD, EVEN_MULT])
+      >- (disj2_tac >> qexists ‘2 * k + 1’ >> simp[EVEN_ADD, EVEN_MULT]))
 QED
 
 Theorem get_locals_insert_Loc:

@@ -44,6 +44,10 @@ into a sequence of operations that share common data.
 [clos_fvsProofScript.sml](clos_fvsProofScript.sml):
 Correctness proof for clos_fvs
 
+[clos_interpProofScript.sml](clos_interpProofScript.sml):
+Correctness proof for closLang interpreter used by the REPL, i.e. Install,
+to avoid spending time compiling simple run-once code in declarations.
+
 [clos_knownProofScript.sml](clos_knownProofScript.sml):
 Correctness proof for clos_known
 
@@ -146,6 +150,9 @@ Correctness proof for word_alloc
 
 [word_bignumProofScript.sml](word_bignumProofScript.sml):
 Correctness proof for word_bignum
+
+[word_cseProofScript.sml](word_cseProofScript.sml):
+Correctness proof for word_cse
 
 [word_depthProofScript.sml](word_depthProofScript.sml):
 Proves correctness of the max_depth applied to the call graph of a
