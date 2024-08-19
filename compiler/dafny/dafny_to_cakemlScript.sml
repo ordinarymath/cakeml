@@ -1692,18 +1692,18 @@ Definition from_datatypeCtors_aux_def:
   from_datatypeCtors_aux env enclosingMod dt_name dt_type
                          ((DatatypeCtor nam args hasAnyArgs)::rest) =
   do
-    cnst_name <<- dest_Name nam;
+    ctor_name <<- dest_Name nam;
     (* Get (CakeML) types from constructor parameters *)
-    cnst_ts <- result_mmap (λdtor. let (frml, _) = dest_datatypeDtor dtor in
+    ctor_ts <- result_mmap (λdtor. let (frml, _) = dest_datatypeDtor dtor in
                                      cakeml_type_from_formal [enclosingMod]
                                                              frml) args;
     (* Generate discriminator *)
     nr_args <<- LENGTH args;
-    dscm_name <<- discriminator_name dt_name cnst_name;
+    dscm_name <<- discriminator_name dt_name ctor_name;
     dscm <<- Dletrec unknown_loc
                      [(dscm_name, "x",
                        Mat (Var (Short "x"))
-                           [(Pcon (SOME (Short cnst_name))
+                           [(Pcon (SOME (Short ctor_name))
                                   (REPLICATE nr_args Pany), True);
                             (Pany, False)])];
     env <<- ((Companion [enclosingMod], Name dscm_name),
@@ -1715,12 +1715,12 @@ Definition from_datatypeCtors_aux_def:
                            | _ => fail "from_datatypeCtor: Unexpectedly, \
                                        \dtor did not have a call name")
                    args;
-    dtor_name <<- MAP (destructor_name dt_name cnst_name) field_names;
+    dtor_name <<- MAP (destructor_name dt_name ctor_name) field_names;
     dtor_param <<- REPLICATE nr_args "x";
     dtor_body <<- MAP
                     (λ(idx, fld). Mat (Var
                                        (Short "x"))
-                                       [Pcon (SOME (Short cnst_name))
+                                       [Pcon (SOME (Short ctor_name))
                                              (dt_pattern nr_args idx fld),
                                         Var (Short fld)])
                     (enumerate 0 field_names);
@@ -1734,9 +1734,13 @@ Definition from_datatypeCtors_aux_def:
     field_types <- result_mmap dtor_ret_type args;
     dtor_type <<- MAP (λretT. Arrow [dt_type] retT) field_types;
     env <<- (ZIP (dtor_path, dtor_type)) ++ env;
+    (* Add constructor to environment *)
+    ctor_path <<- (Companion [enclosingMod], Name ctor_name);
+    ctor_type <<- Arrow field_types dt_type;
+    env <<- ((ctor_path, ctor_type)::env);
     (* Return environment, encoded constructors, and their corresponding
      * discriminators and destructors *)
-    return (env, (cnst_name, cnst_ts)::rest_vrnts,
+    return (env, (ctor_name, ctor_ts)::rest_vrnts,
             dscm::rest_dscms, dtors ++ rest_dtors)
   od
 End
