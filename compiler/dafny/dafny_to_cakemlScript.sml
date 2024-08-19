@@ -109,11 +109,26 @@ Definition string_to_num_def:
   od
 End
 
+Definition is_prefix_def:
+  is_prefix [] ys = T ∧
+  is_prefix (x::xs) [] = F ∧
+  is_prefix (x::xs) (y::ys) = (x = y ∧ is_prefix xs ys)
+End
+
 Definition strip_prefix_def:
-  strip_prefix prefix str =
-  if isPREFIX prefix str
-  then SOME (DROP (LENGTH prefix) str)
+  strip_prefix prefix lst =
+  if is_prefix prefix lst
+  then SOME (DROP (LENGTH prefix) lst)
   else NONE
+End
+
+(* strip_prefix fails if it is not a prefix; this just returns the original
+ * "path" *)
+Definition strip_path_def:
+  strip_path prefix lst =
+  if is_prefix prefix lst
+  then (DROP (LENGTH prefix) lst)
+  else lst
 End
 
 (* TODO move this to dafny_ast? *)
@@ -197,6 +212,10 @@ Definition dest_Ident_def:
   dest_Ident (Ident n) = n
 End
 
+Definition string_from_ident_def:
+  ident_to_string id = dest_Name (dest_Ident id)
+End
+
 (* TODO move this to dafny_ast? *)
 Definition dest_DeclareVar_def:
   dest_DeclareVar s =
@@ -218,7 +237,10 @@ Definition dest_Method_def:
   (isStatic, hasBody, overridingPath, nam, typeParams, params, body, outTypes, outVars)
 End
 
-
+Definition dest_Datatype_def:
+  dest_Datatype (Datatype nam enclosingMod typeParams ctors body isCo attrs) =
+  (nam, enclosingMod, typeParams, ctors, body, isCo, attrs)
+End
 
 Definition cml_ref_ass_def:
   cml_ref_ass lhs rhs = (App Opassign [lhs; rhs])
@@ -309,6 +331,15 @@ Definition fun_from_params_def:
    od)
 End
 
+Definition discriminator_name_def:
+  discriminator_name dt_name cnst_name =
+  "_c_is_" ++ dt_name ++ "_" ++ cnst_name
+End
+
+Definition destructor_name_def:
+  destructor_name dt_name cnst_name field_name =
+  "_c_" ++ dt_name ++ "_" ++ cnst_name ++ "_" ++ field_name
+End
 
 Definition local_env_name_def:
   local_env_name n = (Companion [], n)
@@ -342,6 +373,11 @@ Definition normalize_type_def:
        (normalize_type t)::(map_normalize_type rest))
 Termination
   cheat
+End
+
+Definition dtor_ret_type_def:
+  dtor_ret_type (DatatypeDtor (Formal _ t []) _) = return (normalize_type t) ∧
+  dtor_ret_type _ = fail "dtor_ret_type: Unsupported arguments"
 End
 
 Definition compose_all_def:
@@ -730,6 +766,69 @@ Definition from_literal_def:
    (* Encode a nullable type as ((a' ref) option) *)
    | Null typ =>
        return None
+End
+
+Definition from_type_def:
+  from_type cur_path t =
+  (case t of
+   | Path p_ids typeArgs
+          (ResolvedType_Datatype (DatatypeType dt_ids attrs)) =>
+       if p_ids ≠ dt_ids then
+         fail "from_type: path and datatype id did not match"
+       else if typeArgs ≠ [] then
+         fail "from_type: type args unsupported"
+       else if attrs ≠ [] then
+         fail "from_type: attributes unsupported"
+       else
+         do
+           pth <<- MAP ident_to_string (strip_path cur_path p_ids);
+           dt_id <- cml_id pth;
+           return (Atapp [] dt_id)
+         od
+   | Tuple ts =>
+       do
+         cml_ts <- map_from_type cur_path ts;
+         return (Attup cml_ts)
+       od
+   | Array t _ =>
+       do
+         cml_t <- from_type cur_path t;
+         return (Atapp [cml_t] (Long "Array" (Short "array")))
+       od
+   | Seq t =>
+       do
+         cml_t <- from_type cur_path t;
+         return (Atapp [cml_t] (Short "list"))
+       od
+   | Arrow argTs resT =>
+       do
+         cml_argTs <- map_from_type cur_path argTs;
+         cml_resT <- from_type cur_path resT;
+         return (FOLDR (λx y. Atfun x y) cml_resT cml_argTs)
+       od
+   | Primitive Int => return (Atapp [] (Short "int"))
+   | Primitive Bool => return (Atapp [] (Short "int"))
+   | Primitive Char => return (Atapp [] (Short "char"))
+   | _ => fail "from_type: Unsupported/Unexpected type") ∧
+  map_from_type cur_path ts =
+  (case ts of
+   | [] => return []
+   | (t::rest) =>
+       do
+         cml_t <- from_type cur_path t;
+         cml_rest <- map_from_type cur_path rest;
+         return (cml_t::cml_rest)
+       od)
+Termination
+  cheat
+End
+
+Definition cakeml_type_from_formal_def:
+  cakeml_type_from_formal cur_path (Formal _ t attrs) =
+  if attrs ≠ [] then
+    fail "cakeml_type_from_formal: Attributes unsupported"
+  else
+    from_type cur_path (normalize_type t)
 End
 
 Definition type_from_formals_def:
@@ -1568,6 +1667,123 @@ Definition from_classlist_def:
    fail "from_classlist: Unsupported item list")
 End
 
+Definition dest_datatypeDtor_def:
+  dest_datatypeDtor (DatatypeDtor frml callN) = (frml, callN)
+End
+
+Definition dt_pattern_def:
+  dt_pattern len idx val =
+    (REPLICATE idx Pany) ++ [Pvar val] ++ (REPLICATE (len-idx-1) Pany)
+End
+
+Definition zip3_def:
+  zip3 [] [] [] = return [] ∧
+  zip3 (x::xs) (y::ys) (z::zs) =
+  do
+    rest <- zip3 xs ys zs;
+    return ((x,y,z)::rest)
+  od ∧
+  zip3 xs ys zs = fail "zip3: Lists did not have the same length"
+End
+
+Definition from_datatypeCtors_aux_def:
+  from_datatypeCtors_aux env enclosingMod dt_name [] =
+  return ([], [], [], []) ∧
+  from_datatypeCtors_aux env enclosingMod dt_name
+                         ((DatatypeCtor nam args hasAnyArgs)::rest) =
+  do
+    cnst_name <<- dest_Name nam;
+    (* Get (CakeML) types from constructor parameters *)
+    cnst_ts <- result_mmap (λdtor. let (frml, _) = dest_datatypeDtor dtor in
+                                     cakeml_type_from_formal [enclosingMod]
+                                                             frml) args;
+    (* Generate discriminator *)
+    nr_args <<- LENGTH args;
+    dscm_name <<- discriminator_name dt_name cnst_name;
+    dscm <<- Dletrec unknown_loc
+                     [(dscm_name, "x",
+                       Mat (Var (Short "x"))
+                           [(Pcon (SOME (Short cnst_name))
+                                  (REPLICATE nr_args Pany), True);
+                            (Pany, False)])];
+    env <<- ((Companion [enclosingMod], Name dscm_name), Primitive Bool)::env;
+    (* Generate destructors *)
+    field_names <- result_mmap
+                   (λdtor. case dtor of
+                           | DatatypeDtor _ (SOME s) => return s
+                           | _ => fail "from_datatypeCtor: Unexpectedly, \
+                                       \dtor did not have a call name")
+                   args;
+    dtor_name <<- MAP (destructor_name dt_name cnst_name) field_names;
+    dtor_param <<- REPLICATE nr_args "x";
+    dtor_body <<- MAP
+                    (λ(idx, fld). Mat (Var
+                                       (Short "x"))
+                                       [Pcon (SOME (Short cnst_name))
+                                             (dt_pattern nr_args idx fld),
+                                        Var (Short fld)])
+                    (enumerate 0 field_names);
+    dtors <- zip3 dtor_name dtor_param dtor_body;
+    dtors <<- MAP (λx. Dletrec unknown_loc [x]) dtors;
+    (env, rest_vrnts,
+     rest_dscms, rest_dtors) <- from_datatypeCtors_aux env enclosingMod
+                                                       dt_name rest;
+    (* Add destructors to environment *)
+    dtor_path <<- MAP (λn. (Companion [enclosingMod], Name n)) dtor_name;
+    field_types <- result_mmap dtor_ret_type args;
+    env <<- (ZIP (dtor_path, field_types)) ++ env;
+    (* Return environment, encoded constructors, and their corresponding
+     * discriminators and destructors *)
+    return (env, (cnst_name, cnst_ts)::rest_vrnts,
+            dscm::rest_dscms, dtors ++ rest_dtors)
+  od
+End
+
+Definition from_datatypeCtors_def:
+  from_datatypeCtors env enclosingMod dt_name [] =
+  fail "from_datatypeCtors: Unexpectedly, received empty list of constructors" ∧
+  from_datatypeCtors env enclosingMod dt_name ctors =
+  do
+    (env, ctors, dscms, dtors) <- from_datatypeCtors_aux env enclosingMod
+                                                         dt_name ctors;
+    return (env, ([], dt_name, ctors), dscms ++ dtors)
+  od
+End
+
+Definition from_datatypelist_aux_def:
+  from_datatypelist_aux env [] = (return (env, [], [])) ∧
+  from_datatypelist_aux env ((ModuleItem_Datatype dt)::rest) =
+  (let (nam, enclosingMod,
+        typeParams, ctors, body, isCo, attrs) = dest_Datatype dt
+   in
+     if typeParams ≠ [] then
+       fail "from_datatypelist_aux: type parameters unsupported"
+     else if body ≠ [] then
+       fail "from_datatypelist_aux: datatypes with bodies unsupported"
+     else if isCo then
+       fail "from_datatypelist_aux: co-inductive datatypes unsupported"
+     else if attrs ≠ [] then
+       fail "from_datatypelist_aux: attributes unsupported"
+     else
+       do
+         (* TODO What happens if a program wants to pass around the constructor
+            as a value? Main concern is (un)currying *)
+         dt_name <<- dest_Name nam;
+         (env, dt, dt_funs) <- from_datatypeCtors env enclosingMod
+                                                  dt_name ctors;
+         (env, rest_dts, rest_dt_funs) <- from_datatypelist_aux env rest;
+         return (env, dt::rest_dts, dt_funs ++ rest_dt_funs)
+       od)
+End
+
+Definition from_datatypelist_def:
+  from_datatypelist env dt_mis =
+  do
+    (env, dts, dt_funs) <- from_datatypelist_aux env dt_mis;
+    return (env, Dtype unknown_loc dts, dt_funs)
+  od
+End
+
 (* Pattern matching resulting from from_module (Module nam attrs body) cannot
  * be (automatically) eliminated, hence we use dest_Module *)
 Definition from_module_def:
@@ -1580,15 +1796,16 @@ Definition from_module_def:
          fail "from_module: attributes unsupported"
        else if EXISTS is_moditem_trait modItems then
          fail "from_module: traits unsupported"
-       else if EXISTS is_moditem_datatype modItems then
-         fail "from_module: datatype unsupported"
        else if EXISTS is_moditem_module modItems then
          fail "from_module: Unexpected nested module"
        else
          do
+           dts <<- FILTER is_moditem_datatype modItems;
+           (env, cml_dt, cml_dt_funs) <- from_datatypelist env dts;
            clss <<- FILTER is_moditem_class modItems;
            (env, fun_defs) <- from_classlist env clss;
-           return (env, Dmod (dest_Name nam) fun_defs)
+           return (env, Dmod (dest_Name nam) ([cml_dt] ++ cml_dt_funs ++
+                                              fun_defs))
          od)
 End
 
@@ -1679,31 +1896,31 @@ Definition unpack_def:
 End
 
 (* Testing *)
-(* open dafny_sexpTheory *)
-(* open sexp_to_dafnyTheory *)
-(* open fromSexpTheory simpleSexpParseTheory *)
-(* open TextIO *)
-(* (* val _ = astPP.disable_astPP(); *) *)
+open dafny_sexpTheory
+open sexp_to_dafnyTheory
+open fromSexpTheory simpleSexpParseTheory
+open TextIO
+(* val _ = astPP.disable_astPP(); *)
 (* val _ = astPP.enable_astPP(); *)
 
-(* val inStream = TextIO.openIn "./tests/basic/seq_from_function.sexp"; *)
-(* val fileContent = TextIO.inputAll inStream; *)
-(* val _ = TextIO.closeIn inStream; *)
-(* val fileContent_tm = stringSyntax.fromMLstring fileContent; *)
+val inStream = TextIO.openIn "./tests/test.sexp";
+val fileContent = TextIO.inputAll inStream;
+val _ = TextIO.closeIn inStream;
+val fileContent_tm = stringSyntax.fromMLstring fileContent;
 
-(* val lex_r = EVAL “(lex ^fileContent_tm)” |> concl |> rhs |> rand; *)
-(* val parse_r = EVAL “(parse ^lex_r)” |> concl |> rhs |> rand; *)
-(* val dafny_r = EVAL “(sexp_program ^parse_r)” |> concl |> rhs |> rand; *)
-(* val cakeml_r = EVAL “(compile ^dafny_r)” |> concl |> rhs |> rand; *)
+val lex_r = EVAL “(lex ^fileContent_tm)” |> concl |> rhs |> rand;
+val parse_r = EVAL “(parse ^lex_r)” |> concl |> rhs |> rand;
+val dafny_r = EVAL “(sexp_program ^parse_r)” |> concl |> rhs |> rand;
+val cakeml_r = EVAL “(compile ^dafny_r)” |> concl |> rhs |> rand;
 
-(* val cml_sexp_r = EVAL “implode (print_sexp (listsexp (MAP decsexp  ^cakeml_r)))” *)
+val cml_sexp_r = EVAL “implode (print_sexp (listsexp (MAP decsexp  ^cakeml_r)))”
+                   |> concl |> rhs |> rand;
+(* Test Dafny module *)
+(* val cml_sexp_r = EVAL “implode (print_sexp (listsexp (MAP decsexp  ^dafny_module)))” *)
 (*                    |> concl |> rhs |> rand; *)
-(* (* Test Dafny module *) *)
-(* (* val cml_sexp_r = EVAL “implode (print_sexp (listsexp (MAP decsexp  ^dafny_module)))” *) *)
-(* (*                    |> concl |> rhs |> rand; *) *)
-(* val cml_sexp_str_r = stringSyntax.fromHOLstring cml_sexp_r; *)
-(* val outFile = TextIO.openOut "./tests/test.cml.sexp"; *)
-(* val _ = TextIO.output (outFile, cml_sexp_str_r); *)
-(* val _ = TextIO.closeOut outFile; *)
+val cml_sexp_str_r = stringSyntax.fromHOLstring cml_sexp_r;
+val outFile = TextIO.openOut "./tests/test.cml.sexp";
+val _ = TextIO.output (outFile, cml_sexp_str_r);
+val _ = TextIO.closeOut outFile;
 
 val _ = export_theory();
