@@ -203,6 +203,10 @@ Definition dest_Module_def:
   dest_Module (Module nam attrs body) = (nam, attrs, body)
 End
 
+Definition dest_DatatypeType_def:
+  dest_DatatypeType (DatatypeType path attrs) = (path, attrs)
+End
+
 (* TODO? Move to dafny_ast *)
 Definition dest_Name_def:
   dest_Name (Name s) = s
@@ -636,6 +640,10 @@ Definition arb_value_def:
          fail "arb_value_resolved_type: unsupported attributes"
        else
          arb_value baseT
+   (* TODO The proper way is probably to get the grounding constructor into
+    * the AST https://dafny.org/latest/Compilation/AutoInitialization *)
+   | ResolvedType_Datatype datatype =>
+       return (Raise (Con (SOME (Short "Bind")) []))
    | _ => fail "arb_value_resolved_type: Unsupported resolved type") ∧
   map_arb_value ts =
   (case ts of
@@ -898,6 +906,11 @@ Definition dafny_type_of_def:
          return (Tuple ts)
        od
    | NewArray [_] typ => return (Array (normalize_type typ) 1)
+   | DatatypeValue dtT typeArgs _ _ _ =>
+       do
+         (pth, attrs) <<- dest_DatatypeType dtT;
+         return (Path pth typeArgs (ResolvedType_Datatype dtT))
+       od
    | Convert _ fro tot =>
        (* Assume that we are given a "correct" Dafny program, and this convert
         * is safe *)
@@ -1158,7 +1171,25 @@ Definition from_expression_def:
          return (Some (cml_fapp (Var (Long "Array" (Short "array")))
                                 [cml_dim0; fill_val]))
        od
-   | Convert val fro tot =>
+   | DatatypeValue dtT typeArgs vrnt isCo contents =>
+       if typeArgs ≠ [] then
+         fail "from_expression (DatatypeValue): Type arguments unsupported"
+       else if isCo then
+         fail "from_expression (DatatypeValue): Co-datatypes unsupported"
+       else
+         do
+           (path, attrs) <<- dest_DatatypeType dtT;
+           if attrs ≠ [] then
+             fail "from_expression (DatatypeValue): Attributes unsupported"
+           else
+             do
+               (* TODO: Gen call name: first drop last thing of path *)
+               (* TODO Verify that arguments are listed in the correct order *)
+               cml_args <- map_from_expression comp env (MAP SND contents);
+               fail "TODO"
+             od
+         od
+  | Convert val fro tot =>
        do
          if normalize_type fro ≠ normalize_type tot then
            fail "from_expression (Convert): Converting different types \
@@ -1686,6 +1717,7 @@ Definition zip3_def:
   zip3 xs ys zs = fail "zip3: Lists did not have the same length"
 End
 
+(* TODO Adding to environment may be unnecessary; ponder and delete if yes *)
 Definition from_datatypeCtors_aux_def:
   from_datatypeCtors_aux env enclosingMod dt_name dt_type [] =
   return ([], [], [], []) ∧
