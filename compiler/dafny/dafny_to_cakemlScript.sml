@@ -1687,9 +1687,9 @@ Definition zip3_def:
 End
 
 Definition from_datatypeCtors_aux_def:
-  from_datatypeCtors_aux env enclosingMod dt_name [] =
+  from_datatypeCtors_aux env enclosingMod dt_name dt_type [] =
   return ([], [], [], []) ∧
-  from_datatypeCtors_aux env enclosingMod dt_name
+  from_datatypeCtors_aux env enclosingMod dt_name dt_type
                          ((DatatypeCtor nam args hasAnyArgs)::rest) =
   do
     cnst_name <<- dest_Name nam;
@@ -1706,7 +1706,8 @@ Definition from_datatypeCtors_aux_def:
                            [(Pcon (SOME (Short cnst_name))
                                   (REPLICATE nr_args Pany), True);
                             (Pany, False)])];
-    env <<- ((Companion [enclosingMod], Name dscm_name), Primitive Bool)::env;
+    env <<- ((Companion [enclosingMod], Name dscm_name),
+             Arrow [dt_type] (Primitive Bool))::env;
     (* Generate destructors *)
     field_names <- result_mmap
                    (λdtor. case dtor of
@@ -1727,11 +1728,12 @@ Definition from_datatypeCtors_aux_def:
     dtors <<- MAP (λx. Dletrec unknown_loc [x]) dtors;
     (env, rest_vrnts,
      rest_dscms, rest_dtors) <- from_datatypeCtors_aux env enclosingMod
-                                                       dt_name rest;
+                                                       dt_name dt_type rest;
     (* Add destructors to environment *)
     dtor_path <<- MAP (λn. (Companion [enclosingMod], Name n)) dtor_name;
     field_types <- result_mmap dtor_ret_type args;
-    env <<- (ZIP (dtor_path, field_types)) ++ env;
+    dtor_type <<- MAP (λretT. Arrow [dt_type] retT) field_types;
+    env <<- (ZIP (dtor_path, dtor_type)) ++ env;
     (* Return environment, encoded constructors, and their corresponding
      * discriminators and destructors *)
     return (env, (cnst_name, cnst_ts)::rest_vrnts,
@@ -1740,12 +1742,12 @@ Definition from_datatypeCtors_aux_def:
 End
 
 Definition from_datatypeCtors_def:
-  from_datatypeCtors env enclosingMod dt_name [] =
+  from_datatypeCtors env enclosingMod dt_name dt_type [] =
   fail "from_datatypeCtors: Unexpectedly, received empty list of constructors" ∧
-  from_datatypeCtors env enclosingMod dt_name ctors =
+  from_datatypeCtors env enclosingMod dt_name dt_type ctors =
   do
     (env, ctors, dscms, dtors) <- from_datatypeCtors_aux env enclosingMod
-                                                         dt_name ctors;
+                                                         dt_name dt_type ctors;
     return (env, ([], dt_name, ctors), dscms ++ dtors)
   od
 End
@@ -1769,8 +1771,12 @@ Definition from_datatypelist_aux_def:
          (* TODO What happens if a program wants to pass around the constructor
             as a value? Main concern is (un)currying *)
          dt_name <<- dest_Name nam;
+         dt_id <<- [enclosingMod; Ident nam];
+         dt_type <<- Path dt_id [] (* TODO fix type params once supported *)
+                          (ResolvedType_Datatype
+                           (DatatypeType dt_id attrs));
          (env, dt, dt_funs) <- from_datatypeCtors env enclosingMod
-                                                  dt_name ctors;
+                                                  dt_name dt_type ctors;
          (env, rest_dts, rest_dt_funs) <- from_datatypelist_aux env rest;
          return (env, dt::rest_dts, dt_funs ++ rest_dt_funs)
        od)
