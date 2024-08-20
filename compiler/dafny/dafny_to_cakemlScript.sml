@@ -601,9 +601,6 @@ Definition gen_call_name_def:
   fail "gen_call_name: Passed callName currently unsupported"
 End
 
-(* TODO Implement datatypes
- * May need to rewrite this to be part of the emitted code: print then passes
- * at runtime a type description to it *)
 (* Returns a function that can be applied to a CakeML expression to turn it into
  * a string *)
 Definition to_string_fun_def:
@@ -908,7 +905,10 @@ Definition cakeml_type_from_formal_def:
   if attrs ≠ [] then
     fail "cakeml_type_from_formal: Attributes unsupported"
   else
-    from_type cur_path (normalize_type t)
+    do
+      cur_path <- dest_Companion cur_path;
+      from_type cur_path (normalize_type t)
+    od
 End
 
 Definition type_from_formal_def:
@@ -1800,118 +1800,146 @@ Definition zip3_def:
   zip3 xs ys zs = fail "zip3: Lists did not have the same length"
 End
 
-(* TODO Factor out the section into separate functions? *)
+Definition dest_DatatypeCtor_def:
+  dest_DatatypeCtor (DatatypeCtor nam args hasAnyArgs) =
+  (nam, args, hasAnyArgs)
+End
+
+Definition gen_discriminator_def:
+  gen_discriminator env path dt_type (DatatypeCtor nam args _) =
+  let ctor_name_str = dest_Name nam;
+      discr_name_str = discriminator_name ctor_name_str;
+      discr_def = Dletrec unknown_loc
+                          [(discr_name_str, "x",
+                            Mat (Var (Short "x"))
+                                [(Pcon (SOME (Short ctor_name_str))
+                                       (REPLICATE (LENGTH args) Pany), True);
+                                 (Pany, False)])];
+      env = (((path, Name discr_name_str),
+              Arrow [dt_type] (Primitive Bool))::env)
+  in
+    (env, discr_def)
+End
+
+Definition gen_destructors_def:
+  gen_destructors env path dt_type (DatatypeCtor nam args _) =
+  let ctor_name_str = dest_Name nam;
+      nr_args = LENGTH args;
+      dtor_param = REPLICATE nr_args "x";
+  in
+    do
+      field_names <- result_mmap
+                       (λdtor. case dtor of
+                               | DatatypeDtor _ (SOME s) => return s
+                               | _ => fail "from_datatypeCtor: Unexpectedly, \
+                                           \dtor did not have a call name")
+                       args;
+      dtor_name_strs <<- MAP (destructor_name ctor_name_str) field_names;
+      dtor_paths <<- MAP (λdtorN. (path, Name dtorN)) dtor_name_strs;
+      dtor_bodys <<- MAP
+                       (λ(idx, fld). Mat (Var
+                                          (Short "x"))
+                                         [Pcon (SOME (Short ctor_name_str))
+                                               (dt_pattern nr_args idx fld),
+                                          Var (Short fld)])
+                       (enumerate 0 field_names);
+      dtor_defs <- zip3 dtor_name_strs dtor_param dtor_bodys;
+      dtor_defs <<- MAP (λx. Dletrec unknown_loc [x]) dtor_defs;
+      (* Add to environment *)
+      field_types <- result_mmap dtor_ret_type args;
+      dtor_types <<- MAP (λretT. Arrow [dt_type] retT) field_types;
+      env <<- (ZIP (dtor_paths, dtor_types)) ++ env;
+      (* Return environment and destructor definitions *)
+      return (env, dtor_defs)
+    od
+End
+
+Definition ctor_fields_to_string_def:
+  ctor_fields_to_string path dt_name_str ctor_name_str
+                        field_names field_types inCol =
+  do
+    field_vars <<- MAP (λx. [Var (Short x)]) field_names;
+    field_to_str <- result_mmap (to_string_fun path inCol) field_types;
+    field_str <<- zip_with cml_fapp field_to_str field_vars;
+    field_str <<- cml_list field_str;
+    field_str <<- cml_fapp (Var (Long "String" (Short "concatWith")))
+                           [Lit (StrLit ", "); field_str];
+    return (cml_fapp (Var (Long "String" (Short "concat")))
+                     [cml_list
+                      [Lit (StrLit (dt_name_str ++ "." ++
+                                    ctor_name_str ++ "("));
+                       field_str;
+                       Lit (StrLit (")"))]])
+  od
+End
+
+Definition ctor_to_string_def:
+  ctor_to_string path dt_name_str dt_type (DatatypeCtor nam args _) =
+  let ctor_name_str = dest_Name nam in
+    if args = [] then
+      return (Pcon (SOME (Short ctor_name_str)) [],
+              (Lit (StrLit (dt_name_str ++ "." ++ ctor_name_str))))
+    else
+      do
+        field_names <- result_mmap
+                       (λdtor. case dtor of
+                               | DatatypeDtor _ (SOME s) => return s
+                               | _ => fail "from_datatypeCtor: Unexpectedly, \
+                                           \dtor did not have a call name")
+                       args;
+        field_types <- result_mmap
+                         (λdtor. let (frml, _) = dest_datatypeDtor dtor in
+                                   type_from_formal frml)
+                         args;
+        field_str <- ctor_fields_to_string path dt_name_str ctor_name_str
+                                           field_names field_types F;
+        field_str_in_col <- ctor_fields_to_string path dt_name_str ctor_name_str
+                                                  field_names field_types T;
+        (* Generate branch of case distinction *)
+        field_pvar <<- MAP (λx. Pvar x) field_names;
+        return (Pcon (SOME (Short ctor_name_str)) field_pvar,
+                If (Var (Short "inCol")) field_str_in_col field_str);
+      od
+End
+
+Definition gen_variant_def:
+  gen_variant env path dt_type (DatatypeCtor nam args _) =
+  let ctor_name_str = dest_Name nam;
+  in
+    do
+      field_types <- result_mmap
+                       (λdtor. let (frml, _) = dest_datatypeDtor dtor in
+                                 type_from_formal frml) args;
+      cml_field_types <- result_mmap
+                           (λdtor. let (frml, _) = dest_datatypeDtor dtor in
+                                     cakeml_type_from_formal path frml)
+                           args;
+      vrnt <<- (ctor_name_str, cml_field_types);
+      env <<- (((path, nam), Arrow field_types dt_type)::env);
+      return (env, vrnt)
+    od
+End
+
 (* TODO Adding to environment may be unnecessary; ponder and delete if yes *)
 Definition from_datatypeCtors_aux_def:
   from_datatypeCtors_aux env enclosingMod dt_name dt_type [] =
   return ([], [], [], [], []) ∧
-  from_datatypeCtors_aux env enclosingMod dt_name dt_type
-                         ((DatatypeCtor nam args hasAnyArgs)::rest) =
+  from_datatypeCtors_aux env enclosingMod dt_name dt_type (ctor::rest) =
   do
-    ctor_name <<- dest_Name nam;
-    (* Get (CakeML) types from constructor parameters *)
-    ctor_ts <- result_mmap (λdtor. let (frml, _) = dest_datatypeDtor dtor in
-                                     cakeml_type_from_formal [enclosingMod]
-                                                             frml) args;
-    (* Generate discriminator *)
-    nr_args <<- LENGTH args;
-    dscm_name <<- discriminator_name ctor_name;
-    dscm <<- Dletrec unknown_loc
-                     [(dscm_name, "x",
-                       Mat (Var (Short "x"))
-                           [(Pcon (SOME (Short ctor_name))
-                                  (REPLICATE nr_args Pany), True);
-                            (Pany, False)])];
-    env <<- ((Companion [enclosingMod], Name dscm_name),
-             Arrow [dt_type] (Primitive Bool))::env;
-    (* Generate destructors *)
-    field_names <- result_mmap
-                   (λdtor. case dtor of
-                           | DatatypeDtor _ (SOME s) => return s
-                           | _ => fail "from_datatypeCtor: Unexpectedly, \
-                                       \dtor did not have a call name")
-                   args;
-    dtor_name <<- MAP (destructor_name ctor_name) field_names;
-    dtor_param <<- REPLICATE nr_args "x";
-    dtor_body <<- MAP
-                    (λ(idx, fld). Mat (Var
-                                       (Short "x"))
-                                       [Pcon (SOME (Short ctor_name))
-                                             (dt_pattern nr_args idx fld),
-                                        Var (Short fld)])
-                    (enumerate 0 field_names);
-    dtors <- zip3 dtor_name dtor_param dtor_body;
-    dtors <<- MAP (λx. Dletrec unknown_loc [x]) dtors;
-    (env, rest_vrnts,
-     rest_dscms, rest_dtors,
-     rest_branches) <- from_datatypeCtors_aux env enclosingMod
-                                              dt_name dt_type rest;
-    (* Generate to_string functions *)
-    field_var <<- MAP (λx. [Var (Short x)]) field_names;
-    field_types <- result_mmap (λdtor. let (frml, _) = dest_datatypeDtor dtor in
-                                         type_from_formal frml) args;
-    field_str <- if field_var = [] then
-                    return (Lit (StrLit (dt_name ++ "." ++ ctor_name)))
-                  else
-                    do
-                      field_to_str <- result_mmap
-                                        (to_string_fun
-                                         (Companion [enclosingMod]) F)
-                                        field_types;
-                      field_str <<- zip_with cml_fapp field_to_str field_var;
-                      field_str <<- cml_list field_str;
-                      field_str <<- cml_fapp (Var (Long "String"
-                                                        (Short "concatWith")))
-                           [Lit (StrLit ", "); field_str];
-                      return (cml_fapp (Var (Long "String" (Short "concat")))
-                                       [cml_list
-                                        [Lit (StrLit (dt_name ++ "." ++
-                                                      ctor_name ++ "("));
-                                         field_str;
-                                         Lit (StrLit (")"))]])
-                    od;
-    (* TODO Get rid of this duplication? *)
-    field_str_in_col <- if field_var = [] then
-                          return field_str
-                        else
-                          do
-                            field_to_str_in_col <- result_mmap
-                                                     (to_string_fun
-                                                      (Companion [enclosingMod])
-                                                      T)
-                                                     field_types;
-                            field_str_in_col <<- zip_with cml_fapp
-                                                          field_to_str_in_col
-                                                          field_var;
-                            field_str_in_col <<- cml_list field_str_in_col;
-                            field_str_in_col <<- cml_fapp (Var (Long "String" (Short "concatWith")))
-                                             [Lit (StrLit ", "); field_str_in_col];
-                            return (cml_fapp (Var (Long "String"
-                                                        (Short "concat")))
-                                             [cml_list
-                                              [Lit (StrLit (dt_name ++ "." ++
-                                                            ctor_name ++ "("));
-                                               field_str_in_col;
-                                               Lit (StrLit (")"))]])
-                          od;
-    (* Create case branch of to_string function *)
-    field_pvar <<- MAP (λx. Pvar x) field_names;
-    case_branch <<- (Pcon (SOME (Short ctor_name)) field_pvar,
-                     If (Var (Short "inCol"))
-                        field_str_in_col field_str);
-    (* Add destructors to environment *)
-    dtor_path <<- MAP (λn. (Companion [enclosingMod], Name n)) dtor_name;
-    field_types <- result_mmap dtor_ret_type args;
-    dtor_type <<- MAP (λretT. Arrow [dt_type] retT) field_types;
-    env <<- (ZIP (dtor_path, dtor_type)) ++ env;
-    (* Add constructor to environment *)
-    ctor_path <<- (Companion [enclosingMod], Name ctor_name);
-    ctor_type <<- Arrow field_types dt_type;
-    env <<- ((ctor_path, ctor_type)::env);
-    (* Return environment, encoded constructors, and their corresponding
-     * discriminators and destructors *)
-    return (env, (ctor_name, ctor_ts)::rest_vrnts,
-            dscm::rest_dscms, dtors ++ rest_dtors, case_branch::rest_branches)
+    (nam, args, hasAnyArgs) <<- dest_DatatypeCtor ctor;
+    path <<- Companion [enclosingMod];
+    (* Generate discriminator and destructors *)
+    (env, vrnt) <- gen_variant env path dt_type ctor;
+    (env, dscm) <<- gen_discriminator env path dt_type ctor;
+    (env, dtors) <- gen_destructors env path dt_type ctor;
+    to_string_branch <- ctor_to_string path dt_name dt_type ctor;
+    (* Recursion *)
+    (env, rest_vrnts, rest_dscms,
+     rest_dtors, rest_branches) <- from_datatypeCtors_aux env enclosingMod
+                                                          dt_name dt_type rest;
+    (* Return *)
+    return (env, vrnt::rest_vrnts, dscm::rest_dscms, dtors ++ rest_dtors,
+            to_string_branch::rest_branches)
   od
 End
 
