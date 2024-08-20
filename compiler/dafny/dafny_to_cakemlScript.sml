@@ -236,7 +236,7 @@ Definition dest_Ident_def:
   dest_Ident (Ident n) = n
 End
 
-Definition string_from_ident_def:
+Definition ident_to_string_def:
   ident_to_string id = dest_Name (dest_Ident id)
 End
 
@@ -371,7 +371,7 @@ Definition destructor_name_def:
 End
 
 Definition dt_to_string_name_def:
-  dt_to_string dt_name = "_c_" ++ dt_name ++ "_to_string"
+  dt_to_string_name dt_name = "_c_" ++ dt_name ++ "_to_string"
 End
 
 Definition local_env_name_def:
@@ -633,7 +633,7 @@ Definition to_string_fun_def:
    do
      (path, dt_name) <- split_last path;
      path <<- Companion path;
-     to_string_name <<- dt_to_string (dest_Name (dest_Ident dt_name));
+     to_string_name <<- dt_to_string_name (dest_Name (dest_Ident dt_name));
      cml_fname <- gen_call_name comp path
                                 (CallName (Name to_string_name) NONE
                                           (CallSignature []));
@@ -1952,7 +1952,7 @@ Definition from_datatypeCtors_def:
      dscms, dtors, branches) <- from_datatypeCtors_aux env enclosingMod
                                                        dt_name dt_type ctors;
     to_string_fun <<- Dletrec unknown_loc
-                             [(dt_to_string dt_name,
+                             [(dt_to_string_name dt_name,
                                "inCol",
                                Fun "dt" (Mat (Var (Short "dt")) branches))];
     return (env, ([], dt_name, ctors), to_string_fun::(dscms ++ dtors))
