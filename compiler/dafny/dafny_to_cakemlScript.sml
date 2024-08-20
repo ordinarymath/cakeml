@@ -141,6 +141,16 @@ Definition drop_last_def:
   od
 End
 
+Definition split_last_def:
+  split_last [] = fail "split_last: Cannot split empty list" ∧
+  split_last [x] = return ([], x) ∧
+  split_last (x::xs) =
+  do
+    (rest, last) <- split_last xs;
+    return (x::rest, last)
+  od
+End
+
 (* TODO move this to dafny_ast? *)
 Definition is_DeclareVar_def:
   is_DeclareVar s =
@@ -295,6 +305,10 @@ Definition cml_id_def:
   cml_id (n::rest) = do rest' <- cml_id rest; return (Long n rest') od
 End
 
+Definition cml_bool_def:
+  cml_bool b = if b then True else False
+End
+
 Definition cml_tuple_def:
   cml_tuple [_] = fail "cml_tuple: Cannot create 1-tuple" ∧
   cml_tuple cml_es = return (Con NONE cml_es)
@@ -345,6 +359,7 @@ Definition fun_from_params_def:
    od)
 End
 
+(* TODO Change mangling to _c everywhere? *)
 Definition discriminator_name_def:
   discriminator_name cnst_name =
   "_c_is_" ++ cnst_name
@@ -353,6 +368,10 @@ End
 Definition destructor_name_def:
   destructor_name cnst_name field_name =
   "_c_" ++ cnst_name ++ "_" ++ field_name
+End
+
+Definition dt_to_string_name_def:
+  dt_to_string dt_name = "_c_" ++ dt_name ++ "_to_string"
 End
 
 Definition local_env_name_def:
@@ -554,43 +573,83 @@ Definition gen_param_preamble_def:
   od
 End
 
+Definition dest_Companion_def:
+  dest_Companion (Companion comp) = return comp ∧
+  dest_Companion _ = fail "dest_Companion: Not a Companion"
+End
+
+Definition gen_call_name_def:
+  (gen_call_name comp on (CallName nam onType _) =
+   if onType ≠ NONE then
+     fail "gen_call_name: non-empty onType currently unsupported"
+   else
+     do
+       comp <- dest_Companion comp;
+       on <- dest_Companion on;
+       (* Convert to strings *)
+       comp <<- MAP (dest_Name ∘ dest_Ident) comp;
+       on <<- MAP (dest_Name ∘ dest_Ident) on;
+       (* TODO This only works because we ignore classes at the moment *)
+       comp <<- FILTER (λn. n ≠ "__default") comp;
+       on <<- FILTER (λn. n ≠ "__default") on;
+       if comp = on then
+         cml_id [dest_Name nam]
+       else
+         cml_id (SNOC (dest_Name nam) on)
+     od) ∧
+  gen_call_name _ _ _ =
+  fail "gen_call_name: Passed callName currently unsupported"
+End
+
 (* TODO Implement datatypes
  * May need to rewrite this to be part of the emitted code: print then passes
  * at runtime a type description to it *)
 (* Returns a function that can be applied to a CakeML expression to turn it into
  * a string *)
 Definition to_string_fun_def:
-  (to_string_fun _ (Primitive Char) =
+  (to_string_fun comp _ (Primitive Char) =
    return (Var (Long "Dafny" (Short "char_to_string")))) ∧
-  (to_string_fun _ (Primitive Int) =
+  (to_string_fun comp _ (Primitive Int) =
    return (Var (Long "Dafny" (Short "int_to_string")))) ∧
-  (to_string_fun _ (Primitive Bool) =
+  (to_string_fun comp _ (Primitive Bool) =
    return (Var (Long "Dafny" (Short "bool_to_string")))) ∧
-  (to_string_fun inCol (Seq (Primitive Char)) =
+  (to_string_fun comp inCol (Seq (Primitive Char)) =
    if inCol then
      return (Var (Long "Dafny" (Short "char_list_to_string")))
    else return (Var (Long "String" (Short "implode")))) ∧
-  (to_string_fun _ (Seq t) =
+  (to_string_fun comp _ (Seq t) =
    do
-     elem_to_string <- to_string_fun T t;
+     elem_to_string <- to_string_fun comp T t;
      return (cml_fapp (Var (Long "Dafny" (Short "list_to_string")))
                       [elem_to_string])
    od) ∧
-  (to_string_fun _ (Tuple ts) =
+  (to_string_fun comp _ (Tuple ts) =
    do
-     elems_to_string <- map_to_string_fun T ts;
+     elems_to_string <- map_to_string_fun comp T ts;
      string_list <<- cml_tuple_to_string_list elems_to_string;
      return (cml_fapp (Var (Long "Dafny" (Short "tuple_to_string")))
                            [string_list])
    od) ∧
-  (to_string_fun _ t = fail ("to_string_fun: Unsupported type")) ∧
-  (map_to_string_fun inCol ts =
+  (to_string_fun comp inCol (Path _ []
+                             (ResolvedType_Datatype
+                              (DatatypeType path []))) =
+   do
+     (path, dt_name) <- split_last path;
+     path <<- Companion path;
+     to_string_name <<- dt_to_string (dest_Name (dest_Ident dt_name));
+     cml_fname <- gen_call_name comp path
+                                (CallName (Name to_string_name) NONE
+                                          (CallSignature []));
+     return (cml_fapp (Var cml_fname) [cml_bool inCol])
+   od) ∧
+  (to_string_fun comp _ t = fail ("to_string_fun: Unsupported type")) ∧
+  (map_to_string_fun comp inCol ts =
    case ts of
    | [] => return []
    | (t::rest) =>
        do
-         t <- to_string_fun inCol t;
-         rest <- map_to_string_fun inCol rest;
+         t <- to_string_fun comp inCol t;
+         rest <- map_to_string_fun comp inCol rest;
          return (t::rest)
        od)
 Termination
@@ -852,6 +911,15 @@ Definition cakeml_type_from_formal_def:
     from_type cur_path (normalize_type t)
 End
 
+Definition type_from_formal_def:
+  type_from_formal (Formal _ t attrs) =
+  if attrs ≠ [] then
+    fail "type_from_formal: Attributes unsupported"
+  else
+    return (normalize_type t)
+End
+
+(* TODO Rewrite this in terms of type_from_formal? *)
 Definition type_from_formals_def:
   type_from_formals [] = return [] ∧
   type_from_formals ((Formal _ t attrs)::rest) =
@@ -1133,37 +1201,6 @@ Definition dafny_type_of_def:
        od)
 Termination
   cheat
-End
-
-Definition dest_Companion_def:
-  dest_Companion (Companion comp) = return comp ∧
-  dest_Companion _ = fail "dest_Companion: Not a Companion"
-End
-
-Definition gen_call_name_def:
-  (gen_call_name comp on (CallName nam onType _) =
-   if onType ≠ NONE then
-     fail "gen_call_name: non-empty onType currently unsupported"
-   else if comp = on then
-     do
-       cml_call_name <- cml_id [dest_Name nam];
-       return cml_call_name
-     od
-   else
-     do
-       comp <- dest_Companion comp;
-       on <- dest_Companion on;
-       (* Convert to strings *)
-       comp <<- MAP (dest_Name ∘ dest_Ident) comp;
-       on <<- MAP (dest_Name ∘ dest_Ident) on;
-       (* TODO This only works because we ignore classes at the moment *)
-       comp <<- FILTER (λn. n ≠ "__default") comp;
-       on <<- FILTER (λn. n ≠ "__default") on;
-       cml_call_name <- cml_id (SNOC (dest_Name nam) on);
-       return cml_call_name
-     od) ∧
-  gen_call_name _ _ _ =
-  fail "gen_call_name: Passed callName currently unsupported"
 End
 
 (* TODO Clean up from_expression/dafny_type_of: Some code parts may be duplicated,
@@ -1656,7 +1693,7 @@ Definition from_expression_def:
     | Print e =>
         do
           e_t <- dafny_type_of env e;
-          cml_e_to_string <- to_string_fun F e_t;
+          cml_e_to_string <- to_string_fun comp F e_t;
           cml_e <- from_expression comp env e;
           cml_e_string <<- cml_fapp cml_e_to_string [cml_e];
           return (cml_fapp (Var (Short "print")) [cml_e_string])
@@ -1763,10 +1800,11 @@ Definition zip3_def:
   zip3 xs ys zs = fail "zip3: Lists did not have the same length"
 End
 
+(* TODO Factor out the section into separate functions? *)
 (* TODO Adding to environment may be unnecessary; ponder and delete if yes *)
 Definition from_datatypeCtors_aux_def:
   from_datatypeCtors_aux env enclosingMod dt_name dt_type [] =
-  return ([], [], [], []) ∧
+  return ([], [], [], [], []) ∧
   from_datatypeCtors_aux env enclosingMod dt_name dt_type
                          ((DatatypeCtor nam args hasAnyArgs)::rest) =
   do
@@ -1805,8 +1843,62 @@ Definition from_datatypeCtors_aux_def:
     dtors <- zip3 dtor_name dtor_param dtor_body;
     dtors <<- MAP (λx. Dletrec unknown_loc [x]) dtors;
     (env, rest_vrnts,
-     rest_dscms, rest_dtors) <- from_datatypeCtors_aux env enclosingMod
-                                                       dt_name dt_type rest;
+     rest_dscms, rest_dtors,
+     rest_branches) <- from_datatypeCtors_aux env enclosingMod
+                                              dt_name dt_type rest;
+    (* Generate to_string functions *)
+    field_var <<- MAP (λx. [Var (Short x)]) field_names;
+    field_types <- result_mmap (λdtor. let (frml, _) = dest_datatypeDtor dtor in
+                                         type_from_formal frml) args;
+    field_str <- if field_var = [] then
+                    return (Lit (StrLit (dt_name ++ "." ++ ctor_name)))
+                  else
+                    do
+                      field_to_str <- result_mmap
+                                        (to_string_fun
+                                         (Companion [enclosingMod]) F)
+                                        field_types;
+                      field_str <<- zip_with cml_fapp field_to_str field_var;
+                      field_str <<- cml_list field_str;
+                      field_str <<- cml_fapp (Var (Long "String"
+                                                        (Short "concatWith")))
+                           [Lit (StrLit ", "); field_str];
+                      return (cml_fapp (Var (Long "String" (Short "concat")))
+                                       [cml_list
+                                        [Lit (StrLit (dt_name ++ "." ++
+                                                      ctor_name ++ "("));
+                                         field_str;
+                                         Lit (StrLit (")"))]])
+                    od;
+    (* TODO Get rid of this duplication? *)
+    field_str_in_col <- if field_var = [] then
+                          return field_str
+                        else
+                          do
+                            field_to_str_in_col <- result_mmap
+                                                     (to_string_fun
+                                                      (Companion [enclosingMod])
+                                                      T)
+                                                     field_types;
+                            field_str_in_col <<- zip_with cml_fapp
+                                                          field_to_str_in_col
+                                                          field_var;
+                            field_str_in_col <<- cml_list field_str_in_col;
+                            field_str_in_col <<- cml_fapp (Var (Long "String" (Short "concatWith")))
+                                             [Lit (StrLit ", "); field_str_in_col];
+                            return (cml_fapp (Var (Long "String"
+                                                        (Short "concat")))
+                                             [cml_list
+                                              [Lit (StrLit (dt_name ++ "." ++
+                                                            ctor_name ++ "("));
+                                               field_str_in_col;
+                                               Lit (StrLit (")"))]])
+                          od;
+    (* Create case branch of to_string function *)
+    field_pvar <<- MAP (λx. Pvar x) field_names;
+    case_branch <<- (Pcon (SOME (Short ctor_name)) field_pvar,
+                     If (Var (Short "inCol"))
+                        field_str_in_col field_str);
     (* Add destructors to environment *)
     dtor_path <<- MAP (λn. (Companion [enclosingMod], Name n)) dtor_name;
     field_types <- result_mmap dtor_ret_type args;
@@ -1819,7 +1911,7 @@ Definition from_datatypeCtors_aux_def:
     (* Return environment, encoded constructors, and their corresponding
      * discriminators and destructors *)
     return (env, (ctor_name, ctor_ts)::rest_vrnts,
-            dscm::rest_dscms, dtors ++ rest_dtors)
+            dscm::rest_dscms, dtors ++ rest_dtors, case_branch::rest_branches)
   od
 End
 
@@ -1828,9 +1920,14 @@ Definition from_datatypeCtors_def:
   fail "from_datatypeCtors: Unexpectedly, received empty list of constructors" ∧
   from_datatypeCtors env enclosingMod dt_name dt_type ctors =
   do
-    (env, ctors, dscms, dtors) <- from_datatypeCtors_aux env enclosingMod
-                                                         dt_name dt_type ctors;
-    return (env, ([], dt_name, ctors), dscms ++ dtors)
+    (env, ctors,
+     dscms, dtors, branches) <- from_datatypeCtors_aux env enclosingMod
+                                                       dt_name dt_type ctors;
+    to_string_fun <<- Dletrec unknown_loc
+                             [(dt_to_string dt_name,
+                               "inCol",
+                               Fun "dt" (Mat (Var (Short "dt")) branches))];
+    return (env, ([], dt_name, ctors), to_string_fun::(dscms ++ dtors))
   od
 End
 
@@ -1991,7 +2088,7 @@ open TextIO
 (* val _ = astPP.disable_astPP(); *)
 (* val _ = astPP.enable_astPP(); *)
 
-val inStream = TextIO.openIn "./tests/basic/tree_dt.sexp";
+val inStream = TextIO.openIn "./tests/test.sexp";
 val fileContent = TextIO.inputAll inStream;
 val _ = TextIO.closeIn inStream;
 val fileContent_tm = stringSyntax.fromMLstring fileContent;
