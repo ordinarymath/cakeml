@@ -131,6 +131,16 @@ Definition strip_path_def:
   else lst
 End
 
+Definition drop_last_def:
+  drop_last [] = fail "drop_last: Cannot drop element from empty list" ∧
+  drop_last [x] = return [] ∧
+  drop_last (x::xs) =
+  do
+    xs <- drop_last xs;
+    return (x::xs)
+  od
+End
+
 (* TODO move this to dafny_ast? *)
 Definition is_DeclareVar_def:
   is_DeclareVar s =
@@ -336,13 +346,13 @@ Definition fun_from_params_def:
 End
 
 Definition discriminator_name_def:
-  discriminator_name dt_name cnst_name =
-  "_c_is_" ++ dt_name ++ "_" ++ cnst_name
+  discriminator_name cnst_name =
+  "_c_is_" ++ cnst_name
 End
 
 Definition destructor_name_def:
-  destructor_name dt_name cnst_name field_name =
-  "_c_" ++ dt_name ++ "_" ++ cnst_name ++ "_" ++ field_name
+  destructor_name cnst_name field_name =
+  "_c_" ++ cnst_name ++ "_" ++ field_name
 End
 
 Definition local_env_name_def:
@@ -544,6 +554,9 @@ Definition gen_param_preamble_def:
   od
 End
 
+(* TODO Implement datatypes
+ * May need to rewrite this to be part of the emitted code: print then passes
+ * at runtime a type description to it *)
 (* Returns a function that can be applied to a CakeML expression to turn it into
  * a string *)
 Definition to_string_fun_def:
@@ -643,7 +656,7 @@ Definition arb_value_def:
    (* TODO The proper way is probably to get the grounding constructor into
     * the AST https://dafny.org/latest/Compilation/AutoInitialization *)
    | ResolvedType_Datatype datatype =>
-       return (Raise (Con (SOME (Short "Bind")) []))
+       return None
    | _ => fail "arb_value_resolved_type: Unsupported resolved type") ∧
   map_arb_value ts =
   (case ts of
@@ -1029,6 +1042,8 @@ Definition dafny_type_of_def:
              fail "dafny_type_of (BinOp): Unsupported bop/types"
          od
    | ArrayLen _ _ => return (Primitive Int)
+   | Select _ _ _ _ fieldT =>
+       return (normalize_type fieldT)
    | SelectFn comp nam onDt isStatic _ =>
        if onDt then
          fail "dafny_type_of (SelectFn): On datatype unsupported"
@@ -1105,6 +1120,7 @@ Definition dafny_type_of_def:
          | _ => fail "dafny_type_of (Apply): Unexpectedly, apply used on \
                      \non-arrow type"
        od
+   | TypeTest _ _ _ => return (Primitive Bool)
    | _ => fail ("dafny_type_of: Unsupported expression")) ∧
   map_dafny_type_of env ts =
   (case ts of
@@ -1128,6 +1144,11 @@ Definition gen_call_name_def:
   (gen_call_name comp on (CallName nam onType _) =
    if onType ≠ NONE then
      fail "gen_call_name: non-empty onType currently unsupported"
+   else if comp = on then
+     do
+       cml_call_name <- cml_id [dest_Name nam];
+       return cml_call_name
+     od
    else
      do
        comp <- dest_Companion comp;
@@ -1138,10 +1159,8 @@ Definition gen_call_name_def:
        (* TODO This only works because we ignore classes at the moment *)
        comp <<- FILTER (λn. n ≠ "__default") comp;
        on <<- FILTER (λn. n ≠ "__default") on;
-       if comp = on then
-         cml_id [dest_Name nam]
-       else
-         cml_id (SNOC (dest_Name nam) on)
+       cml_call_name <- cml_id (SNOC (dest_Name nam) on);
+       return cml_call_name
      od) ∧
   gen_call_name _ _ _ =
   fail "gen_call_name: Passed callName currently unsupported"
@@ -1183,10 +1202,14 @@ Definition from_expression_def:
              fail "from_expression (DatatypeValue): Attributes unsupported"
            else
              do
-               (* TODO: Gen call name: first drop last thing of path *)
+               path <- drop_last path;
+               path <<- (Companion (path ++ [Ident (Name "__default")]));
+               cml_fname <- gen_call_name comp path
+                                          (CallName vrnt NONE
+                                                    (CallSignature []));
                (* TODO Verify that arguments are listed in the correct order *)
                cml_args <- map_from_expression comp env (MAP SND contents);
-               fail "TODO"
+               return (Con (SOME (cml_fname)) cml_args)
              od
          od
   | Convert val fro tot =>
@@ -1255,6 +1278,18 @@ Definition from_expression_def:
            cml_e <- from_expression comp env e;
            return (cml_fapp (Var (Long "Array" (Short "length")))
                             [cml_get_arr cml_e])
+         od
+   | Select e field_name _ onDt _ =>
+       if ¬onDt then
+         fail "from_expression (Select): Unexpectedly not on datatype"
+       else
+         do
+           e_t <- dafny_type_of env e;
+           cml_e <- from_expression comp env e;
+           fail "from_expression (Select): Unsupported (variant not part of \
+                \AST"
+           (* TODO: To dispatch properly, we need to know what variant we
+            * have here - should be patched in AST *)
          od
    | SelectFn f_comp nam onDt isStatic _ =>
        if onDt then
@@ -1348,6 +1383,17 @@ Definition from_expression_def:
          cml_e <- from_expression comp env e;
          cml_args <- map_from_expression comp env args;
          return (cml_fapp cml_e cml_args)
+       od
+   | TypeTest on dt vrnt =>
+       do
+         cml_on <- from_expression comp env on;
+         path <- drop_last dt;
+         path <<- (Companion (path ++ [Ident (Name "__default")]));
+         dscm_name <<- Name (discriminator_name (dest_Name vrnt));
+         cml_fname <- gen_call_name comp path
+                                    (CallName dscm_name NONE
+                                              (CallSignature []));
+         return (cml_fapp (Var cml_fname) [cml_on])
        od
    | InitializationValue t =>
        arb_value (normalize_type t)
@@ -1731,7 +1777,7 @@ Definition from_datatypeCtors_aux_def:
                                                              frml) args;
     (* Generate discriminator *)
     nr_args <<- LENGTH args;
-    dscm_name <<- discriminator_name dt_name ctor_name;
+    dscm_name <<- discriminator_name ctor_name;
     dscm <<- Dletrec unknown_loc
                      [(dscm_name, "x",
                        Mat (Var (Short "x"))
@@ -1747,7 +1793,7 @@ Definition from_datatypeCtors_aux_def:
                            | _ => fail "from_datatypeCtor: Unexpectedly, \
                                        \dtor did not have a call name")
                    args;
-    dtor_name <<- MAP (destructor_name dt_name ctor_name) field_names;
+    dtor_name <<- MAP (destructor_name ctor_name) field_names;
     dtor_param <<- REPLICATE nr_args "x";
     dtor_body <<- MAP
                     (λ(idx, fld). Mat (Var
@@ -1945,7 +1991,7 @@ open TextIO
 (* val _ = astPP.disable_astPP(); *)
 (* val _ = astPP.enable_astPP(); *)
 
-val inStream = TextIO.openIn "./tests/test.sexp";
+val inStream = TextIO.openIn "./tests/basic/tree_dt.sexp";
 val fileContent = TextIO.inputAll inStream;
 val _ = TextIO.closeIn inStream;
 val fileContent_tm = stringSyntax.fromMLstring fileContent;
