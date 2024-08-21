@@ -11,12 +11,14 @@ val _ = translation_extends "sexp_to_dafnyProg";
 
 val r = translate locationTheory.unknown_loc_def;
 val r = translate DROP; (* for strip_prefix_def *)
+val r = translate REPLICATE;
 
 val r = translate dafny_to_cakemlTheory.int_to_string_def;
 val r = translate dafny_to_cakemlTheory.num_to_string_def;
 val r = translate dafny_to_cakemlTheory.string_to_int_def;
 val r = translate dafny_to_cakemlTheory.string_to_num_def;
 val r = translate dafny_to_cakemlTheory.strip_prefix_def;
+val r = translate dafny_to_cakemlTheory.split_last_def;
 val r = translate dafny_to_cakemlTheory.is_DeclareVar_def;
 val r = translate dafny_to_cakemlTheory.is_Eq_def;
 val r = translate dafny_to_cakemlTheory.is_Seq_def;
@@ -82,6 +84,9 @@ val r = translate dafny_to_cakemlTheory.tuple_len_def;
 val r = translate dafny_to_cakemlTheory.dafny_type_of_def;
 val r = translate dafny_to_cakemlTheory.dest_Companion_def;
 val r = translate dafny_to_cakemlTheory.gen_call_name_def;
+val r = translate dafny_to_cakemlTheory.cml_multi_dim_arr_def;
+val r = translate dafny_to_cakemlTheory.cml_multi_dim_idx_aux_def;
+val r = translate dafny_to_cakemlTheory.cml_multi_dim_idx_def;
 val r = translate_no_ind dafny_to_cakemlTheory.from_expression_def;
 val r = translate dafny_to_cakemlTheory.process_function_body_def;
 val r = translate dafny_to_cakemlTheory.process_method_body_def;
